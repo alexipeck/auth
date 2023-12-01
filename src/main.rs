@@ -1,56 +1,47 @@
-use axum::http::HeaderMap;
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use blake3::Hasher;
-use chrono::{DateTime, Utc, Duration};
-use email_address::EmailAddress;
-use parking_lot::RwLock;
 use auth::error::AuthFlowError;
 use auth::serde_implementations::datetime_utc;
-use reqwest::StatusCode;
+use axum::body::Body;
+use axum::http::header::{AUTHORIZATION, CONTENT_SECURITY_POLICY, CONTENT_TYPE, COOKIE};
+use axum::http::{HeaderMap, HeaderName, Method, Response, StatusCode};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use blake3::Hasher;
+use chrono::{DateTime, Duration, Utc};
+use cookie::{CookieBuilder, time};
+use email_address::EmailAddress;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
-
-
+use tokio::net::TcpListener;
+use tower_http::body::Full;
 
 use axum::extract::ConnectInfo;
-use axum::headers::authorization::Bearer;
-use axum::headers::{Authorization, Cookie};
 use axum::routing::get;
 use axum::{
-    extract::{Extension, TypedHeader},
+    extract::Extension,
     response::{IntoResponse, Json},
-    routing::post,
     Router,
 };
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, ACCESS_CONTROL_ALLOW_CREDENTIALS, COOKIE};
-use reqwest::{Method};
 use std::net::SocketAddr;
-use std::str::from_utf8;
 use std::sync::{atomic::AtomicBool, Arc};
-use std::time::Instant;
 use tokio::sync::Notify;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use uuid::Uuid;
 
-pub struct DummySecurityManager {
+const COOKIE_NAME: &str = "uamtoken";
 
-}
+pub struct DummySecurityManager {}
 
 impl Default for DummySecurityManager {
     fn default() -> Self {
-        Self {
-            
-        }
+        Self {}
     }
 }
 
-impl DummySecurityManager {
-    
-}
+impl DummySecurityManager {}
 
 pub trait Expired {
     fn expired(&self) -> bool;
@@ -81,15 +72,21 @@ impl LoginManager {
         let salt: Uuid = Uuid::new_v4();
         let key: String = headers.hash_debug(salt);
         let expiry = Utc::now() + self.auth_lifetime;
-        self.auth_flows.write().insert(key.to_owned(), (salt, expiry.to_owned()));
+        self.auth_flows
+            .write()
+            .insert(key.to_owned(), (salt, expiry.to_owned()));
         (key, expiry)
     }
-    pub fn verify_auth_flow(&self, key: &String, headers: &HeaderMap) -> Result<bool, AuthFlowError> {
+    pub fn verify_auth_flow(
+        &self,
+        key: &String,
+        headers: &HeaderMap,
+    ) -> Result<bool, AuthFlowError> {
         if let Some((salt, expiry)) = self.auth_flows.read().get(key) {
             if expiry.expired() {
-                return Err(AuthFlowError::Expired)
+                return Err(AuthFlowError::Expired);
             }
-            return Ok(&headers.hash_debug(*salt) == key)
+            return Ok(&headers.hash_debug(*salt) == key);
         }
         Err(AuthFlowError::Invalid)
     }
@@ -110,7 +107,7 @@ impl LoginManager {
 }
 
 #[derive(Debug, Serialize)]
-struct authFlowInit {
+struct AuthFlowInit {
     key: String,
     #[serde(with = "datetime_utc")]
     expiry: DateTime<Utc>,
@@ -118,7 +115,7 @@ struct authFlowInit {
 
 #[derive(Debug, Serialize)]
 struct UserAuthenticated {
-    token: String,//will use different type
+    token: String, //will use different type
     #[serde(with = "datetime_utc")]
     expiry: DateTime<Utc>,
 }
@@ -151,20 +148,89 @@ enum Payload {
 }
 
 #[derive(Debug, Serialize)]
-enum Response {
-    AuthFlowInit(authFlowInit),
+enum ResponseData {
+    AuthFlowInit(AuthFlowInit),
     UserAuthenticated(UserAuthenticated),
     /* AccountSetup() */
     CredentialsRejected,
 }
 
-impl IntoResponse for Response {
+//struct TK((ResponseData, Option<String>));
+struct FullResponseData {
+    response_data: ResponseData,
+    cookie_token: Option<String>,
+}
+
+impl IntoResponse for FullResponseData {
     fn into_response(self) -> axum::response::Response {
-        let status_code = match self {
-            Self::AuthFlowInit(_) | Self::UserAuthenticated(_) => StatusCode::OK,
-            Self::CredentialsRejected => StatusCode::UNAUTHORIZED,
+        let status_code = match self.response_data {
+            ResponseData::AuthFlowInit(_) | ResponseData::UserAuthenticated(_) => StatusCode::OK,
+            ResponseData::CredentialsRejected => StatusCode::UNAUTHORIZED,
         };
-        (status_code, Json(self)).into_response()
+
+        let json_body = match serde_json::to_string(&self.response_data) {
+            Ok(json) => json,
+            Err(err) => {
+                println!("{}", err);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json("Internal server error"),
+                )
+                    .into_response();
+            }
+        };
+
+        let csp_data = format!(
+            "default-src 'self'; \
+            script-src 'self' https://api.clouduam.com; \
+            img-src 'self' https://clouduam.com http://dev.clouduam.com:81; \
+            media-src 'self'; \
+            object-src 'none'; \
+            manifest-src 'self'; \
+            frame-ancestors 'self'; \
+            form-action 'self'; \
+            base-uri 'self'"
+        );
+
+        let mut response_builder = Response::builder()
+            .status(status_code)
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .header(CONTENT_SECURITY_POLICY, csp_data);
+
+        match self.response_data {
+            ResponseData::UserAuthenticated(_) => {
+                if let Some(cookie_token) = self.cookie_token {
+                    let cookie = CookieBuilder::new(COOKIE_NAME, cookie_token)
+                        .http_only(true)
+                        .secure(true)
+                        .path("/")
+                        .max_age(time::Duration::hours(1))
+                        .build();
+                    response_builder = response_builder.header("Set-Cookie", cookie.to_string());
+                } else {
+                    println!("UserAuthenticated should have contained a cookie token to send to the client, returning http code 500 to client.");
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json("Internal server error"),
+                    )
+                        .into_response()
+                }
+            }
+            _ => {},
+        }
+
+        match response_builder.body(Body::from(json_body))
+        {
+            Ok(response_body) => response_body,
+            Err(err) => {
+                println!("{}", err);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json("Internal server error"),
+                )
+                    .into_response()
+            }
+        }
     }
 }
 
@@ -195,8 +261,10 @@ async fn start_auth_flow(
     Extension(login_manager): Extension<Arc<LoginManager>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
+    //println!("{:?}", headers);
+    //println!("{:?}", addr);
     let (key, expiry) = login_manager.setup_auth_flow(&headers);
-    Response::AuthFlowInit(authFlowInit { key, expiry })
+    FullResponseData { response_data: ResponseData::AuthFlowInit(AuthFlowInit { key, expiry }), cookie_token: None }
 }
 
 pub async fn run_rest_server(
@@ -207,10 +275,12 @@ pub async fn run_rest_server(
 ) {
     let client = reqwest::Client::new();
     let cors = CorsLayer::new()
-        .allow_methods(vec![Method::GET, Method::POST])
+        .allow_methods([Method::GET, Method::POST])
         .allow_headers(vec![CONTENT_TYPE, AUTHORIZATION, COOKIE])
         /* .allow_origin(AllowOrigin::exact("https://clouduam.com".parse().unwrap())) */
-        .allow_origin(AllowOrigin::exact("http://dev.clouduam.com:81".parse().unwrap()))
+        .allow_origin(AllowOrigin::exact(
+            "http://dev.clouduam.com:81".parse().unwrap(),
+        ))
         .allow_credentials(true);
 
     let app = Router::new()
@@ -221,14 +291,20 @@ pub async fn run_rest_server(
         .layer(Extension(login_manager));
 
     let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 8886));
+    let listener = TcpListener::bind(addr).await.unwrap();
     println!("REST endpoint listening on {}", addr);
+
+    //let t = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await;
+
     tokio::select! {
-        _ = axum::Server::bind(&addr)
-        .serve(app.into_make_service_with_connect_info::<SocketAddr>()) => {},
+        result = async { axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await } => {
+            if let Err(err) = result {
+                println!("{}", err);
+            }
+        }
         _ = stop_notify.notified() => {},
     }
 }
-
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

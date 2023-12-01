@@ -1,3 +1,2 @@
-
-pub mod serde_implementations;
 pub mod error;
+pub mod serde_implementations;

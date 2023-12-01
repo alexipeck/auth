@@ -1,6 +1,6 @@
 pub mod datetime_utc {
     use chrono::{DateTime, Utc};
-    use serde::{Serializer, Serialize};
+    use serde::{Serialize, Serializer};
 
     pub fn serialize<S>(datetime: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
     where
