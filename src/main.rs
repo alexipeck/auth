@@ -9,7 +9,7 @@ use axum::http::{HeaderMap, Method, StatusCode};
 use axum::routing::{get, post};
 use axum::{
     extract::Extension,
-    response::{IntoResponse, Json},
+    response::IntoResponse,
     Router,
 };
 use axum_extra::headers::authorization::Bearer;
@@ -23,7 +23,6 @@ use tracing::Level;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{Layer, Registry};
-use std::env;
 use std::io::stdout;
 use std::net::SocketAddr;
 use std::sync::{atomic::AtomicBool, Arc};
@@ -68,7 +67,7 @@ async fn init_login_flow(
     Extension(login_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    println!("{:?}", headers);
+    //println!("{:?}", headers);
     //println!("{:?}", addr);
     let (key, expiry) = login_manager.setup_login_flow(&headers);
     FullResponseData::basic(ResponseData::InitLoginFlow(LoginFlow::new(key, expiry)))
@@ -81,7 +80,7 @@ async fn verify_login_flow(
     axum::response::Json(login_flow): axum::response::Json<LoginFlow>,
 ) -> impl IntoResponse {
     println!("{:?}", addr);
-    println!("{:?}", headers);
+    //println!("{:?}", headers);
     /* println!("{:?}", cookie);
     println!("{:?}", authorization); */
     return match login_manager.verify_login_flow(&login_flow, &headers) {
@@ -145,7 +144,7 @@ pub async fn run_rest_server(
         .route("/init-login-flow", get(init_login_flow))
         .route("/verify-auth", post(verify_auth))
         .route("/verify-login-flow", post(verify_login_flow))
-        .layer(TraceLayer::new_for_http())
+        /* .layer(TraceLayer::new_for_http()) */
         .layer(cors)
         .layer(Extension(security_manager))
         .layer(Extension(login_manager));

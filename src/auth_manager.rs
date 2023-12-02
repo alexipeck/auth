@@ -1,18 +1,56 @@
 use crate::{
     bidirectional::LoginFlow,
     error::{AuthFlowError, Error, InternalError},
-    r#trait::{Expired, HashDebug},
+    r#trait::{Expired, HashDebug}, filter_headers_into_btreeset,
 };
 use axum::http::HeaderMap;
 use chrono::{DateTime, Duration, Utc};
 use parking_lot::RwLock;
+use regex::RegexSet;
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
+
+pub struct Regexes {
+    pub roaming_header_profile: RegexSet,
+    pub restricted_header_profile: RegexSet,
+}
+
+impl Default for Regexes {
+    fn default() -> Self {
+        let mut keys = vec![
+            "host",
+            "user-agent",
+            "x-forwarded-host",
+            "x-forwarded-proto",
+            "x-forwarded-port",
+            "referer",
+            "origin",
+            "sec-ch-ua",
+            "sec-ch-ua-mobile",
+            "sec-ch-ua-platform",
+            "sec-fetch-dest",
+            "sec-fetch-site",
+            "sec-fetch-mode",
+            "accept-language",
+            "dnt",
+            "connection",
+            "accept-encoding",
+        ];
+        let roaming_header_profile = RegexSet::new(&keys.iter().map(|&key| format!(r"^{}$", regex::escape(key))).collect::<Vec<String>>()).unwrap();
+        keys.push("x-real-ip");
+        keys.push("x-forwarded-for");
+        let restricted_header_profile = RegexSet::new(&keys.into_iter().map(|key| format!(r"^{}$", regex::escape(key))).collect::<Vec<String>>()).unwrap();
+        
+        Self { roaming_header_profile, restricted_header_profile }
+    }
+}
 
 pub struct AuthManager {
     auth_lifetime: Duration,
 
     login_flows: Arc<RwLock<HashMap<String, (Uuid, DateTime<Utc>)>>>,
+
+    regexes: Regexes,
 }
 
 impl Default for AuthManager {
@@ -20,12 +58,14 @@ impl Default for AuthManager {
         Self {
             login_flows: Arc::new(RwLock::new(HashMap::new())),
             auth_lifetime: Duration::minutes(5),
+            regexes: Regexes::default(),
         }
     }
 }
 
 impl AuthManager {
     pub fn setup_login_flow(&self, headers: &HeaderMap) -> (String, DateTime<Utc>) {
+        let headers = filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
         let salt: Uuid = Uuid::new_v4();
         let key: String = headers.hash_debug(salt);
         let expiry = Utc::now() + self.auth_lifetime;
@@ -43,11 +83,9 @@ impl AuthManager {
             if expiry.expired() {
                 return Err(InternalError::AuthFlow(AuthFlowError::Expired).into());
             }
-            let t = headers.hash_debug(*salt);
-            println!("{:?}", t);
-            let k = login_flow.get_key();
-            println!("{:?}", k);
-            return Ok(&t == k);
+            let headers = filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
+            let regenerated_key = headers.hash_debug(*salt);
+            return Ok(&regenerated_key == login_flow.get_key());
         }
         Err(InternalError::AuthFlow(AuthFlowError::Invalid).into())
     }
