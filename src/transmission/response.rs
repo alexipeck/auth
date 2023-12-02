@@ -1,4 +1,4 @@
-use crate::{bidirectional::LoginFlow, serde::datetime_utc, COOKIE_NAME};
+use crate::{bidirectional::LoginFlow, serde::datetime_utc};
 use axum::{
     body::Body,
     http::{header::CONTENT_SECURITY_POLICY, response::Builder, StatusCode},
@@ -43,6 +43,7 @@ pub enum ResponseData {
 
 pub struct FullResponseData {
     response_data: ResponseData,
+    cookie_name: Option<String>,
     cookie_token: Option<String>,
 }
 
@@ -50,13 +51,15 @@ impl FullResponseData {
     pub fn basic(response_data: ResponseData) -> Self {
         Self {
             response_data,
+            cookie_name: None,
             cookie_token: None,
         }
     }
 
-    pub fn with_cookie(response_data: ResponseData, cookie: String) -> Self {
+    pub fn with_cookie(response_data: ResponseData, cookie_name: String, cookie: String) -> Self {
         Self {
             response_data,
+            cookie_name: Some(cookie_name),
             cookie_token: Some(cookie),
         }
     }
@@ -85,16 +88,21 @@ impl IntoResponse for FullResponseData {
 
         match self.response_data {
             ResponseData::UserAuthenticated(_) => {
-                if let Some(cookie_token) = self.cookie_token {
-                    let cookie = CookieBuilder::new(COOKIE_NAME, cookie_token)
-                        .http_only(true)
-                        .secure(true)
-                        .path("/")
-                        .max_age(time::Duration::hours(1))
-                        .build();
-                    response_builder = response_builder.header("Set-Cookie", cookie.to_string());
-                } else {
-                    println!("UserAuthenticated should have contained a cookie token to send to the client, returning http code 500 to client.");
+                let mut success: bool = false;
+                if let Some(cookie_name) = self.cookie_name {
+                    if let Some(cookie_token) = self.cookie_token {
+                        let cookie = CookieBuilder::new(cookie_name, cookie_token)
+                            .http_only(true)
+                            .secure(true)
+                            .path("/")
+                            .max_age(time::Duration::hours(1))
+                            .build();
+                        response_builder = response_builder.header("Set-Cookie", cookie.to_string());
+                        success = true;
+                    }
+                }
+                if !success {
+                    println!("UserAuthenticated should have contained a cookie token and cookie name to send to the client, returning http code 500 to client.");
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json("Internal server error"),

@@ -15,8 +15,6 @@ pub mod response;
 pub mod serde;
 pub mod r#trait;
 
-pub const COOKIE_NAME: &str = "uamtoken"; //This won't exist and will be passed down from AuthManager
-
 ///hashes with blake3
 pub fn hash_string(data: &str) -> String {
     let mut hasher = Hasher::new();

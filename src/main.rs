@@ -64,18 +64,18 @@ async fn init_login_flow(
     /* TypedHeader(cookie): TypedHeader<Cookie>, */
     /* TypedHeader(authorization): TypedHeader<Authorization<Bearer>>, */
     /* Extension(security_manager): Extension<Arc<SecurityManager>>, */
-    Extension(login_manager): Extension<Arc<AuthManager>>,
+    Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
     //println!("{:?}", headers);
     //println!("{:?}", addr);
-    let (key, expiry) = login_manager.setup_login_flow(&headers);
+    let (key, expiry) = auth_manager.setup_login_flow(&headers);
     FullResponseData::basic(ResponseData::InitLoginFlow(LoginFlow::new(key, expiry)))
 }
 
 async fn verify_login_flow(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Extension(login_manager): Extension<Arc<AuthManager>>,
+    Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
     axum::response::Json(login_flow): axum::response::Json<LoginFlow>,
 ) -> impl IntoResponse {
@@ -83,7 +83,7 @@ async fn verify_login_flow(
     //println!("{:?}", headers);
     /* println!("{:?}", cookie);
     println!("{:?}", authorization); */
-    return match login_manager.verify_login_flow(&login_flow, &headers) {
+    return match auth_manager.verify_login_flow(&login_flow, &headers) {
         Ok(valid) => {
             if valid {
                 StatusCode::OK.into_response()
@@ -100,7 +100,7 @@ async fn verify_auth(
     TypedHeader(cookie): TypedHeader<Cookie>,
     TypedHeader(authorization): TypedHeader<Authorization<Bearer>>,
     /* Extension(security_manager): Extension<Arc<SecurityManager>>, */
-    Extension(login_manager): Extension<Arc<AuthManager>>,
+    Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
     println!("{:?}", addr);
@@ -115,7 +115,7 @@ async fn invite_user(
     TypedHeader(cookie): TypedHeader<Cookie>,
     TypedHeader(authorization): TypedHeader<Authorization<Bearer>>,
     /* Extension(security_manager): Extension<Arc<SecurityManager>>, */
-    Extension(login_manager): Extension<Arc<AuthManager>>,
+    Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
     println!("{:?}", addr);
@@ -126,7 +126,7 @@ async fn invite_user(
 }
 
 pub async fn run_rest_server(
-    login_manager: Arc<AuthManager>,
+    auth_manager: Arc<AuthManager>,
     security_manager: Arc<DummySecurityManager>,
     _stop: Arc<AtomicBool>,
     stop_notify: Arc<Notify>,
@@ -135,9 +135,7 @@ pub async fn run_rest_server(
         .allow_methods([Method::GET, Method::POST])
         .allow_headers(vec![CONTENT_TYPE, AUTHORIZATION, COOKIE])
         /* .allow_origin(AllowOrigin::exact("https://clouduam.com".parse().unwrap())) */
-        .allow_origin(AllowOrigin::exact(
-            "http://dev.clouduam.com:81".parse().unwrap(),
-        ))
+        .allow_origin(AllowOrigin::exact(auth_manager.config.get_allowed_origin().to_owned()))
         .allow_credentials(true);
 
     let app = Router::new()
@@ -147,7 +145,7 @@ pub async fn run_rest_server(
         /* .layer(TraceLayer::new_for_http()) */
         .layer(cors)
         .layer(Extension(security_manager))
-        .layer(Extension(login_manager));
+        .layer(Extension(auth_manager));
 
     let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 8886));
     let listener = TcpListener::bind(addr).await.unwrap();
@@ -165,6 +163,9 @@ pub async fn run_rest_server(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cookie_name: String = "uamtoken".to_string(); //This won't exist and will be passed down from AuthManager
+    let allowed_origin: String = "http://dev.clouduam.com:81".to_owned();
+
     let base_dirs = BaseDirs::new().unwrap();
     let log_path = base_dirs.config_dir().join("auth/logs/");
 
@@ -188,9 +189,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stop_notify = Arc::new(Notify::new());
     let stop = Arc::new(AtomicBool::new(false));
     let security_manager = Arc::new(DummySecurityManager::default());
-    let login_manager = Arc::new(AuthManager::default());
+    let auth_manager = match AuthManager::new(cookie_name, allowed_origin) {
+        Ok(auth_manager) => auth_manager,
+        Err(err) => {
+            panic!("{}", err);
+        },
+    };
+    let auth_manager = Arc::new(auth_manager);
 
-    run_rest_server(login_manager, security_manager, stop, stop_notify).await;
+    run_rest_server(auth_manager, security_manager, stop, stop_notify).await;
 
     Ok(())
 }

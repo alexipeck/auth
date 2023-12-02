@@ -3,7 +3,7 @@ use crate::{
     error::{AuthFlowError, Error, InternalError},
     r#trait::{Expired, HashDebug}, filter_headers_into_btreeset,
 };
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
 use parking_lot::RwLock;
 use regex::RegexSet;
@@ -45,21 +45,48 @@ impl Default for Regexes {
     }
 }
 
+pub struct Config {
+    cookie_name: String,
+    allowed_origin: HeaderValue,
+}
+
+impl Config {
+    pub fn new(cookie_name: String, allowed_origin: HeaderValue) -> Self {
+        Self {
+            cookie_name,
+            allowed_origin,
+        }
+    }
+    pub fn get_cookie_name(&self) -> &String {
+        &self.cookie_name
+    }
+    pub fn get_allowed_origin(&self) -> &HeaderValue {
+        &self.allowed_origin
+    }
+}
+
 pub struct AuthManager {
     auth_lifetime: Duration,
 
     login_flows: Arc<RwLock<HashMap<String, (Uuid, DateTime<Utc>)>>>,
 
     regexes: Regexes,
+    pub config: Config,
 }
 
-impl Default for AuthManager {
-    fn default() -> Self {
-        Self {
+impl AuthManager {
+    pub fn new(cookie_name: String, allowed_origin: String) -> Result<Self, Error> {
+        let allowed_origin: HeaderValue = match allowed_origin.parse() {
+            Ok(allowed_origin) => allowed_origin,
+            Err(err) => return Err(InternalError::InvalidOrigin(err.into()).into()),
+        };
+        Ok(Self {
             login_flows: Arc::new(RwLock::new(HashMap::new())),
             auth_lifetime: Duration::minutes(5),
+
             regexes: Regexes::default(),
-        }
+            config: Config::new(cookie_name, allowed_origin),
+        })
     }
 }
 

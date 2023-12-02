@@ -1,3 +1,4 @@
+use axum::http::header::InvalidHeaderValue;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -12,6 +13,8 @@ pub enum AuthFlowError {
 pub enum InternalError {
     #[error("AuthFlow({0})")]
     AuthFlow(#[from] AuthFlowError),
+    #[error("InvalidOrigin({0})")]
+    InvalidOrigin(#[from] InvalidHeaderValue),
 }
 
 #[derive(Error, Debug)]
