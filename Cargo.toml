@@ -24,3 +24,8 @@ tracing-subscriber = { version = "0.3.18" }
 tracing = "0.1.40"
 directories = "5.0.1"
 regex = "1.10.2"
+rust-argon2 = "2.0.0"
+google-authenticator = "0.4.2"
+rand = "0.8.5"
+rand_chacha = "0.3.1"
+rand_core = { version = "0.6.4", features = ["getrandom"] }

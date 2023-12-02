@@ -1,10 +1,12 @@
 use crate::{
     bidirectional::LoginFlow,
-    error::{AuthFlowError, Error, InternalError},
-    r#trait::{Expired, HashDebug}, filter_headers_into_btreeset,
+    error::{AuthFlowError, Error, InternalError, AuthenticationError, AccountSetupError},
+    r#trait::{Expired, HashDebug}, filter_headers_into_btreeset, user::User, cryptography::generate_token,
 };
 use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
+use email_address::EmailAddress;
+use google_authenticator::GoogleAuthenticator;
 use parking_lot::RwLock;
 use regex::RegexSet;
 use std::{collections::HashMap, sync::Arc};
@@ -69,6 +71,8 @@ pub struct AuthManager {
     auth_lifetime: Duration,
 
     login_flows: Arc<RwLock<HashMap<String, (Uuid, DateTime<Utc>)>>>,
+    users: Arc<RwLock<HashMap<Uuid, User>>>,
+    email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>>,
 
     regexes: Regexes,
     pub config: Config,
@@ -83,6 +87,8 @@ impl AuthManager {
         Ok(Self {
             login_flows: Arc::new(RwLock::new(HashMap::new())),
             auth_lifetime: Duration::minutes(5),
+            users: Arc::new(RwLock::new(HashMap::new())),
+            email_to_id_registry: Arc::new(RwLock::new(HashMap::new())),
 
             regexes: Regexes::default(),
             config: Config::new(cookie_name, allowed_origin),
@@ -128,6 +134,94 @@ impl AuthManager {
         let mut auth_flows_write_lock = self.login_flows.write();
         for key in keys.iter() {
             let _ = auth_flows_write_lock.remove(key);
+        }
+    }
+
+    pub fn generate_user_uid(&self) -> Uuid {
+        loop {
+            let uid = Uuid::new_v4();
+            if self.users.read().contains_key(&uid) {
+                continue;
+            }
+            return uid;
+        }
+    }
+
+    pub fn add_user(
+        &self,
+        email: EmailAddress,
+        password: String,
+        display_name: String,
+        two_fa_client_secret: String,
+    ) -> Result<(), Error> {
+        let salt = generate_token(32);
+        let hashed_and_salted_password =
+            match argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &argon2::Config::default()) {
+                Ok(hashed_and_salted_password) => hashed_and_salted_password,
+                Err(err) => return Err(InternalError::AccountSetup(AccountSetupError::Argon2(err)).into()),
+            };
+        let user = User {
+            id: self.generate_user_uid(),
+            email: email.to_owned(),
+            hashed_and_salted_password,
+            display_name,
+            two_fa_client_secret,
+        };
+        /* let mut data_connection = establish_connection(DBSource::AgentManager);
+        if let Err(err) = save_authorisation_profile(&mut data_connection, &authorisation) {
+            warn!("{}", err);
+        }
+        if let Err(err) = save_user(&mut data_connection, &user) {
+            panic!("{}", err);
+        } */
+
+        /* self.authorisations
+            .write()
+            .insert(authorisation_uid, authorisation); */
+        self.email_to_id_registry.write().insert(email, user.id);
+        self.users.write().insert(user.id, user);
+        //TODO: Send this user to authenticated clients to update in the list without reload
+        Ok(())
+    }
+
+    pub fn validate_user_credentials(
+        &self,
+        email: &EmailAddress,
+        password: &String,
+        two_factor_code: String,
+    ) -> Result<Uuid, Error> {
+        match self.email_to_id_registry.read().get(email) {
+            Some(user_id) => {
+                match self.users.read().get(user_id) {
+                    Some(user) => {
+                        match argon2::verify_encoded(
+                            &user.hashed_and_salted_password,
+                            password.as_bytes(),
+                        ) {
+                            Ok(verified) => {
+                                if verified {
+                                    let auth = GoogleAuthenticator::new();
+                                    match auth.get_code(user.two_fa_client_secret.as_str(), 0) {
+                                        Ok(current_code) => {
+                                            if two_factor_code == current_code {
+                                                Ok(user.id)
+                                            } else {
+                                                Err(InternalError::Authentication(AuthenticationError::Incorrect2FACode).into())
+                                            }
+                                        }
+                                        Err(err) => Err(InternalError::Authentication(AuthenticationError::GoogleAuthenticator(err)).into()),
+                                    }
+                                } else {
+                                    Err(InternalError::Authentication(AuthenticationError::IncorrectCredentials).into())
+                                }
+                            }
+                            Err(err) => Err(InternalError::Authentication(AuthenticationError::InvalidPasswordFormat(err)).into()),
+                        }
+                    }
+                    None => Err(InternalError::Authentication(AuthenticationError::UserUIDNotRegisteredToEmail(email.to_owned())).into()),
+                }
+            }
+            None => Err(InternalError::Authentication(AuthenticationError::EmailNotRegistered(email.to_owned())).into()),
         }
     }
     /* fn validate_login_credentials(&self, credentials: LoginCredentials) -> Result<()/* Option<User> */, Error> {

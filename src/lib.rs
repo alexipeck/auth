@@ -14,6 +14,8 @@ pub mod request;
 pub mod response;
 pub mod serde;
 pub mod r#trait;
+pub mod user;
+pub mod cryptography;
 
 ///hashes with blake3
 pub fn hash_string(data: &str) -> String {
