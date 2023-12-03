@@ -4,6 +4,7 @@ use auth::credentials::LoginCredentials;
 use auth::cryptography::generate_random_base32_string;
 use auth::response::{FullResponseData, ResponseData};
 use auth::serde::datetime_utc;
+use auth::token::Token;
 use axum::extract::ConnectInfo;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE};
 use axum::http::{HeaderMap, Method, StatusCode};
@@ -13,6 +14,7 @@ use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::{Authorization, Cookie};
 use axum_extra::TypedHeader;
 use chrono::{DateTime, Utc};
+use cookie::time::Duration;
 use directories::BaseDirs;
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
@@ -60,7 +62,7 @@ enum Payload {
 async fn init_login_flow(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     /* TypedHeader(cookie): TypedHeader<Cookie>, */
-    /* TypedHeader(authorization): TypedHeader<Authorization<Bearer>>, */
+    /* TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>, */
     /* Extension(security_manager): Extension<Arc<SecurityManager>>, */
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
@@ -68,7 +70,15 @@ async fn init_login_flow(
     //println!("{:?}", headers);
     //println!("{:?}", addr);
     let (key, expiry) = auth_manager.setup_login_flow(&headers);
-    FullResponseData::basic(ResponseData::InitLoginFlow(LoginFlow::new(key, expiry)))
+    let login_flow = LoginFlow::new(key, expiry);
+    let token = match Token::create_signed_and_encrypted(&login_flow, auth_manager.encryption_keys.get_private_key(), auth_manager.encryption_keys.get_symmetric_key(), auth_manager.encryption_keys.get_iv()) {
+        Ok(token) => token,
+        Err(err) => {
+            println!("{}", err);
+            return FullResponseData::basic(ResponseData::InternalServerError)
+        },
+    };
+    FullResponseData::with_cookie(ResponseData::InitLoginFlow(login_flow), "login-flow".to_string(), token, Duration::minutes(5))
 }
 
 async fn verify_login_flow(
@@ -79,8 +89,8 @@ async fn verify_login_flow(
 ) -> impl IntoResponse {
     println!("{:?}", addr);
     //println!("{:?}", headers);
-    /* println!("{:?}", cookie);
-    println!("{:?}", authorization); */
+    /* println!("{:?}", cookie); */
+    //asdf;
     return match auth_manager.verify_login_flow(&login_flow, &headers) {
         Ok(valid) => {
             if valid {
@@ -93,10 +103,36 @@ async fn verify_login_flow(
     };
 }
 
+async fn credentials(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Extension(auth_manager): Extension<Arc<AuthManager>>,
+    headers: HeaderMap,
+    axum::response::Json(login_credentials): axum::response::Json<LoginCredentials>,
+) -> impl IntoResponse {
+    println!("{:?}", addr);
+    //asdf;
+    //println!("{:?}", headers);
+    /* println!("{:?}", cookie);
+    println!("{:?}", authorisation); */
+    /* match auth_manager.verify_login_flow(&login_credentials, &headers) {
+        Ok(valid) => {
+            if !valid {
+                return StatusCode::UNAUTHORIZED.into_response();
+            }
+        }
+        Err(err) => {
+            println!("{}", err);
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
+    }; */
+
+    panic!();
+}
+
 async fn verify_auth(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     TypedHeader(cookie): TypedHeader<Cookie>,
-    TypedHeader(authorization): TypedHeader<Authorization<Bearer>>,
+    TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
     /* Extension(security_manager): Extension<Arc<SecurityManager>>, */
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
@@ -104,14 +140,14 @@ async fn verify_auth(
     println!("{:?}", addr);
     println!("{:?}", headers);
     println!("{:?}", cookie);
-    println!("{:?}", authorization);
+    println!("{:?}", authorisation);
     StatusCode::OK.into_response()
 }
 
 async fn invite_user(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     TypedHeader(cookie): TypedHeader<Cookie>,
-    TypedHeader(authorization): TypedHeader<Authorization<Bearer>>,
+    TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
     /* Extension(security_manager): Extension<Arc<SecurityManager>>, */
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
@@ -119,7 +155,7 @@ async fn invite_user(
     println!("{:?}", addr);
     println!("{:?}", headers);
     println!("{:?}", cookie);
-    println!("{:?}", authorization);
+    println!("{:?}", authorisation);
     StatusCode::OK.into_response()
 }
 
@@ -139,9 +175,11 @@ pub async fn run_rest_server(
         .allow_credentials(true);
 
     let app = Router::new()
-        .route("/init-login-flow", get(init_login_flow))
+        .route("/login/init-login-flow", get(init_login_flow))
         .route("/verify-auth", post(verify_auth))
         .route("/verify-login-flow", post(verify_login_flow))
+        .route("/login/credentials", post(credentials))
+        /* .route("/logout", post(logout)) */
         /* .layer(TraceLayer::new_for_http()) */
         .layer(cors)
         .layer(Extension(security_manager))

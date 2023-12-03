@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::error::{
     Base64DecodeError, Error, FromUtf8Error, InternalError, OpenSSLError, SerdeError, TokenError,
 };
@@ -5,31 +7,109 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use openssl::{
     hash::MessageDigest,
     pkey::{PKey, Private, Public},
-    rsa::Rsa,
     sign::{Signer, Verifier},
     symm::{decrypt, encrypt, Cipher},
 };
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-struct Header {
-    alg: String,
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Algorithm {
+    RSA,
+    RSASHA256,
 }
 
-impl Default for Header {
-    fn default() -> Self {
-        Self {
-            alg: "RSA-SHA256".to_string(),
-        }
+impl fmt::Display for Algorithm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            Self::RSA => "RSA",
+            Self::RSASHA256 => "RSA-SHA256"
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Header {
+    alg: Algorithm,
+}
+
+impl Header {
+    pub fn signed_encrypted() -> Self {
+        Self { alg: Algorithm::RSASHA256 }
+    }
+    pub fn signed() -> Self {
+        Self { alg: Algorithm::RSA }
     }
 }
 
 #[derive(Debug, Clone)]
-struct Token {}
+pub struct Token {}
 
 impl Token {
-    fn create<T: Serialize>(
+    pub fn create_signed<T: Serialize>(
+        data: &T,
+        private_key: &PKey<Private>,
+    ) -> Result<String, Error> {
+        let serialised_data_base64 = {
+            let serialised_data = match serde_json::to_string(data) {
+                Ok(serialised_data) => serialised_data,
+                Err(err) => {
+                    warn!("{}", err);
+                    return Err(
+                        InternalError::Token(TokenError::DataSerialisation(SerdeError(err))).into(),
+                    );
+                }
+            };
+            URL_SAFE_NO_PAD.encode(&serialised_data)
+        };
+        let header_base64 = {
+            let header_str = match serde_json::to_string(&Header::signed()) {
+                Ok(header_str) => header_str,
+                Err(err) => {
+                    warn!("{}", err);
+                    return Err(
+                        InternalError::Token(TokenError::DataSerialisation(SerdeError(err))).into(),
+                    );
+                }
+            };
+            URL_SAFE_NO_PAD.encode(&header_str)
+        };
+        let signature_base64 = {
+            let mut signer = match Signer::new(MessageDigest::sha256(), private_key) {
+                Ok(signer) => signer,
+                Err(err) => {
+                    warn!("{}", err);
+                    return Err(
+                        InternalError::Token(TokenError::CreateSigner(OpenSSLError(err))).into(),
+                    );
+                }
+            };
+            if let Err(err) = signer.update(header_base64.as_bytes()) {
+                warn!("{}", err);
+                return Err(InternalError::Token(TokenError::FeedSigner(OpenSSLError(err))).into());
+            }
+            if let Err(err) = signer.update(serialised_data_base64.as_bytes()) {
+                warn!("{}", err);
+                return Err(InternalError::Token(TokenError::FeedSigner(OpenSSLError(err))).into());
+            }
+            let signature = match signer.sign_to_vec() {
+                Ok(signature) => signature,
+                Err(err) => {
+                    warn!("{}", err);
+                    return Err(
+                        InternalError::Token(TokenError::FinaliseSignature(OpenSSLError(err)))
+                            .into(),
+                    );
+                }
+            };
+            URL_SAFE_NO_PAD.encode(&signature)
+        };
+        Ok(format!(
+            "{}.{}.{}",
+            header_base64, serialised_data_base64, signature_base64
+        ))
+    }
+    pub fn create_signed_and_encrypted<T: Serialize>(
         data: &T,
         private_key: &PKey<Private>,
         symmetric_key: &[u8],
@@ -62,7 +142,7 @@ impl Token {
             URL_SAFE_NO_PAD.encode(&encrypted_data)
         };
         let header_base64 = {
-            let header_str = match serde_json::to_string(&Header::default()) {
+            let header_str = match serde_json::to_string(&Header::signed_encrypted()) {
                 Ok(header_str) => header_str,
                 Err(err) => {
                     warn!("{}", err);
@@ -139,8 +219,8 @@ impl Token {
                     .into())
                 }
             };
-            if header.alg != "RSA-SHA256" {
-                println!("Header algorithm doesn't match expected RSA-SHA256");
+            if header.alg != Algorithm::RSASHA256 {
+                println!("Header algorithm doesn't match expected {}", Algorithm::RSASHA256);
                 return Err(InternalError::Token(TokenError::HeadedUnexpectedAlgorithm).into());
             }
         }

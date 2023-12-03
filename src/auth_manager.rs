@@ -2,7 +2,7 @@ use crate::{
     bidirectional::LoginFlow,
     cryptography::generate_token,
     error::{
-        AccountSetupError, AuthFlowError, AuthenticationError, Error, InternalError, StartupError,
+        AccountSetupError, AuthFlowError, AuthenticationError, Error, InternalError, StartupError, EncryptionError, OpenSSLError,
     },
     filter_headers_into_btreeset,
     r#trait::{Expired, HashDebug},
@@ -99,44 +99,50 @@ pub struct EncryptionKeys {
     iv: [u8; 16],
 }
 
-impl Default for EncryptionKeys {
-    fn default() -> Self {
+impl EncryptionKeys {
+    pub fn new() -> Result<Self, Error> {
         let rsa: Rsa<Private> = match Rsa::generate(2048) {
             Ok(rsa) => rsa,
-            Err(err) => {
-                panic!();
-            }
+            Err(err) => return Err(InternalError::Encryption(EncryptionError::GeneratingRSABase(OpenSSLError(err))).into()),
         };
         let private_key: PKey<Private> = match PKey::from_rsa(rsa.clone()) {
             Ok(private_key) => private_key,
-            Err(err) => {
-                panic!();
-            }
+            Err(err) => return Err(InternalError::Encryption(EncryptionError::GeneratingRSAPrivate(OpenSSLError(err))).into()),
         };
         let public_key_pem: Vec<u8> = match rsa.public_key_to_pem() {
             Ok(public_key_pem) => public_key_pem,
-            Err(err) => {
-                panic!();
-            }
+            Err(err) => return Err(InternalError::Encryption(EncryptionError::GeneratingRSAPublicPEM(OpenSSLError(err))).into()),
         };
         let public_key: PKey<Public> = match PKey::public_key_from_pem(&public_key_pem) {
             Ok(public_key) => public_key,
-            Err(err) => {
-                panic!();
-            }
+            Err(err) => return Err(InternalError::Encryption(EncryptionError::GeneratingRSAPublic(OpenSSLError(err))).into()),
         };
         let symmetric_key: [u8; 32] = rand::thread_rng().gen(); // 256-bit key for AES-256
         let iv: [u8; 16] = rand::thread_rng().gen(); // 128-bit IV for AES
-        Self {
+        Ok(Self {
             private_key,
             public_key,
             symmetric_key,
             iv,
-        }
+        })
+    }
+
+    pub fn get_private_key(&self) -> &PKey<Private> {
+        &self.private_key
+    }
+
+    pub fn get_public_key(&self) -> &PKey<Public> {
+        &self.public_key
+    }
+
+    pub fn get_symmetric_key(&self) -> &[u8; 32] {
+        &self.symmetric_key
+    }
+
+    pub fn get_iv(&self) -> &[u8; 16] {
+        &self.iv
     }
 }
-
-impl EncryptionKeys {}
 
 pub struct AuthManager {
     auth_lifetime: Duration,
@@ -156,23 +162,31 @@ impl AuthManager {
             Ok(allowed_origin) => allowed_origin,
             Err(err) => {
                 return Err(
-                    InternalError::StartupError(StartupError::InvalidOrigin(err.into())).into(),
+                    InternalError::Startup(StartupError::InvalidOrigin(err.into())).into(),
                 )
             }
         };
+        let email_to_id_registry = Arc::new(RwLock::new(HashMap::new()));
         let users: Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, HashMap<_, _>>> =
             Arc::new(RwLock::new(HashMap::new()));
-        let debug_user: User = User::new(Uuid::parse_str("cad8de7f-5507-48ef-9d4e-68939b4ade81").unwrap(), "Alexi Peck".to_string(), EmailAddress::new_unchecked("alexinicolaspeck@gmail.com"), "$argon2id$v=19$m=2097152,t=1,p=1$RF5ndW4oU15VTHpnNFpRNHJmW30vRmoqU3lTPyxhRHE$Xl3u7HaK8/TMaukl0xTBwATjGkfHBS1GH8LHVILgkw".to_string(), "HX4IXEYSPJMHEG36YNEOQDPTKAUDF6YMFBDRCO3Z5LWXQGVO25KOTVWB2UOYWJFH".to_string());
-        users.write().insert(*debug_user.get_id(), debug_user);
+        {
+            let user_id = Uuid::parse_str("cad8de7f-5507-48ef-9d4e-68939b4ade81").unwrap();
+            let email = EmailAddress::new_unchecked("alexinicolaspeck@gmail.com");
+            let debug_user: User = User::new(user_id, "Alexi Peck".to_string(), email.to_owned(), "$argon2id$v=19$m=2097152,t=1,p=1$RF5ndW4oU15VTHpnNFpRNHJmW30vRmoqU3lTPyxhRHE$Xl3u7HaK8/TMaukl0xTBwATjGkfHBS1GH8LHVILgkw".to_string(), "HX4IXEYSPJMHEG36YNEOQDPTKAUDF6YMFBDRCO3Z5LWXQGVO25KOTVWB2UOYWJFH".to_string());
+            users.write().insert(*debug_user.get_id(), debug_user);
+            email_to_id_registry.write().insert(email, user_id);
+        }
+        
+        let encryption_keys = EncryptionKeys::new()?;
         Ok(Self {
             login_flows: Arc::new(RwLock::new(HashMap::new())),
             auth_lifetime: Duration::minutes(5),
             users,
-            email_to_id_registry: Arc::new(RwLock::new(HashMap::new())),
+            email_to_id_registry,
 
             regexes: Regexes::default(),
             config: Config::new(cookie_name, allowed_origin),
-            encryption_keys: EncryptionKeys::default(),
+            encryption_keys,
         })
     }
 }

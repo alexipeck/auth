@@ -112,6 +112,18 @@ pub enum StartupError {
 }
 
 #[derive(Error, Debug)]
+pub enum EncryptionError {
+    #[error("GeneratingRSABase({0})")]
+    GeneratingRSABase(OpenSSLError),
+    #[error("GeneratingRSAPrivate({0})")]
+    GeneratingRSAPrivate(OpenSSLError),
+    #[error("GeneratingRSAPublic({0})")]
+    GeneratingRSAPublic(OpenSSLError),
+    #[error("GeneratingRSAPublicPEM({0})")]
+    GeneratingRSAPublicPEM(OpenSSLError),
+}
+
+#[derive(Error, Debug)]
 pub enum InternalError {
     #[error("AuthFlow({0})")]
     AuthFlow(#[from] AuthFlowError),
@@ -121,8 +133,10 @@ pub enum InternalError {
     Authentication(#[from] AuthenticationError),
     #[error("Token({0})")]
     Token(#[from] TokenError),
-    #[error("StartupError({0})")]
-    StartupError(#[from] StartupError),
+    #[error("Startup({0})")]
+    Startup(#[from] StartupError),
+    #[error("Encryption({0})")]
+    Encryption(#[from] EncryptionError),
 }
 
 #[derive(Error, Debug)]

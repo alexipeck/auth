@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use cookie::{time, CookieBuilder};
+use cookie::{time::{self, Duration, OffsetDateTime}, CookieBuilder, Expiration};
 use serde::Serialize;
 
 fn create_baseline_response() -> Builder {
@@ -39,28 +39,26 @@ pub enum ResponseData {
     UserAuthenticated(UserAuthenticated),
     /* AccountSetup() */
     CredentialsRejected,
+    InternalServerError,
 }
 
 pub struct FullResponseData {
     response_data: ResponseData,
-    cookie_name: Option<String>,
-    cookie_token: Option<String>,
+    cookie: Option<(String, String, Duration)>,
 }
 
 impl FullResponseData {
     pub fn basic(response_data: ResponseData) -> Self {
         Self {
             response_data,
-            cookie_name: None,
-            cookie_token: None,
+            cookie: None,
         }
     }
 
-    pub fn with_cookie(response_data: ResponseData, cookie_name: String, cookie: String) -> Self {
+    pub fn with_cookie(response_data: ResponseData, cookie_name: String, cookie: String, lifetime: Duration) -> Self {
         Self {
             response_data,
-            cookie_name: Some(cookie_name),
-            cookie_token: Some(cookie),
+            cookie: Some((cookie_name, cookie, lifetime)),
         }
     }
 }
@@ -70,6 +68,11 @@ impl IntoResponse for FullResponseData {
         let status_code = match self.response_data {
             ResponseData::InitLoginFlow(_) | ResponseData::UserAuthenticated(_) => StatusCode::OK,
             ResponseData::CredentialsRejected => StatusCode::UNAUTHORIZED,
+            ResponseData::InternalServerError => return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json("Internal server error"),
+            )
+                .into_response(),
         };
 
         let json_body = match serde_json::to_string(&self.response_data) {
@@ -85,33 +88,16 @@ impl IntoResponse for FullResponseData {
         };
 
         let mut response_builder = create_baseline_response().status(status_code);
-
-        match self.response_data {
-            ResponseData::UserAuthenticated(_) => {
-                let mut success: bool = false;
-                if let Some(cookie_name) = self.cookie_name {
-                    if let Some(cookie_token) = self.cookie_token {
-                        let cookie = CookieBuilder::new(cookie_name, cookie_token)
-                            .http_only(true)
-                            .secure(true)
-                            .path("/")
-                            .max_age(time::Duration::hours(1))
-                            .build();
-                        response_builder =
-                            response_builder.header("Set-Cookie", cookie.to_string());
-                        success = true;
-                    }
-                }
-                if !success {
-                    println!("UserAuthenticated should have contained a cookie token and cookie name to send to the client, returning http code 500 to client.");
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json("Internal server error"),
-                    )
-                        .into_response();
-                }
-            }
-            _ => {}
+        if let Some((cookie_name, cookie, lifetime)) = self.cookie {
+            let cookie = CookieBuilder::new(cookie_name, cookie)
+                /* .http_only(true)
+                .secure(true) */
+                .path("/")
+                .max_age(lifetime)
+                .expires(Expiration::DateTime(OffsetDateTime::now_utc() + lifetime))
+                .build();
+            response_builder =
+                response_builder.header("Set-Cookie", cookie.to_string());
         }
 
         match response_builder.body(Body::from(json_body)) {
