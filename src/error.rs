@@ -1,7 +1,11 @@
+use std::fmt;
+
 use axum::http::header::InvalidHeaderValue;
 use email_address::EmailAddress;
 use google_authenticator::GAError;
 use thiserror::Error;
+
+use crate::impl_error_wrapper;
 
 #[derive(Error, Debug)]
 pub enum AuthFlowError {
@@ -42,6 +46,52 @@ pub enum AuthenticationError {
     #[error("EmailAlreadyExists({0})")]
     EmailAlreadyExists(EmailAddress), */
 }
+impl_error_wrapper!(SerdeError, serde_json::error::Error);
+impl_error_wrapper!(OpenSSLError, openssl::error::ErrorStack);
+impl_error_wrapper!(Base64DecodeError, base64::DecodeError);
+impl_error_wrapper!(FromUtf8Error, std::string::FromUtf8Error);
+
+#[derive(Error, Debug)]
+pub enum TokenError {
+    #[error("DataSerialisation({0})")]
+    DataSerialisation(#[from] SerdeError),
+    #[error("DataEncryption({0})")]
+    DataEncryption(#[from] OpenSSLError),
+    #[error("HeaderSerialisation({0})")]
+    HeaderSerialisation(SerdeError),
+    #[error("HeaderDeserialisation({0})")]
+    HeaderDeserialisation(SerdeError),
+    #[error("CreateSigner({0})")]
+    CreateSigner(OpenSSLError),
+    #[error("FeedSigner({0})")]
+    FeedSigner(OpenSSLError),
+    #[error("FinaliseSignature({0})")]
+    FinaliseSignature(OpenSSLError),
+    #[error("InvalidFormatForDecoding")]
+    InvalidFormatForDecoding,
+    #[error("HeaderBase64Decode({0})")]
+    HeaderBase64Decode(Base64DecodeError),
+    #[error("Feedverifier({0})")]
+    FeedVerifier(OpenSSLError),
+    #[error("HeaderUnexpectedAlgorithm")]
+    HeadedUnexpectedAlgorithm,
+    #[error("SignatureBase64Decode({0})")]
+    SignatureBase64Decode(Base64DecodeError),
+    #[error("CreateVerifier({0})")]
+    CreateVerifier(OpenSSLError),
+    #[error("FinaliseVerifier({0})")]
+    FinaliseVerifier(OpenSSLError),
+    #[error("SignatureVerificationFailed")]
+    SignatureVerificationFailed,
+    #[error("PayloadBase64Decode({0})")]
+    PayloadBase64Decode(Base64DecodeError),
+    #[error("DataDecryption({0})")]
+    DataDecryption(OpenSSLError),
+    #[error("DataBytesToString({0})")]
+    DataBytesToString(FromUtf8Error),
+    #[error("DataDeserialisation({0})")]
+    DataDeserialisation(SerdeError),
+}
 
 #[derive(Error, Debug)]
 pub enum AccountSetupError {
@@ -65,6 +115,8 @@ pub enum InternalError {
     Authentication(#[from] AuthenticationError),
     #[error("InvalidOrigin({0})")]
     InvalidOrigin(#[from] InvalidHeaderValue),
+    #[error("Token({0})")]
+    Token(#[from] TokenError),
 }
 
 #[derive(Error, Debug)]
