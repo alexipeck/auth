@@ -1,7 +1,7 @@
 use blake3::Hasher;
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
 use thiserror::Error;
+use uuid::Uuid;
 
 pub trait HashDebug {
     fn hash_debug(&self, salt: Uuid) -> String;

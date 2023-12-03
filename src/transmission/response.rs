@@ -97,7 +97,8 @@ impl IntoResponse for FullResponseData {
                             .path("/")
                             .max_age(time::Duration::hours(1))
                             .build();
-                        response_builder = response_builder.header("Set-Cookie", cookie.to_string());
+                        response_builder =
+                            response_builder.header("Set-Cookie", cookie.to_string());
                         success = true;
                     }
                 }
