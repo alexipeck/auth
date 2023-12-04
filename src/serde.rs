@@ -12,8 +12,8 @@ pub mod datetime_utc {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Ok(DateTime::parse_from_rfc3339(&s)
+        let string = String::deserialize(deserializer)?;
+        Ok(DateTime::parse_from_rfc3339(&string)
             .map_err(serde::de::Error::custom)?
             .with_timezone(&Utc))
     }

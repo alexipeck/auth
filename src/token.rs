@@ -21,10 +21,14 @@ pub enum Algorithm {
 
 impl fmt::Display for Algorithm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            Self::RSA => "RSA",
-            Self::RSASHA256 => "RSA-SHA256"
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::RSA => "RSA",
+                Self::RSASHA256 => "RSA-SHA256",
+            }
+        )
     }
 }
 
@@ -35,10 +39,14 @@ struct Header {
 
 impl Header {
     pub fn signed_encrypted() -> Self {
-        Self { alg: Algorithm::RSASHA256 }
+        Self {
+            alg: Algorithm::RSASHA256,
+        }
     }
     pub fn signed() -> Self {
-        Self { alg: Algorithm::RSA }
+        Self {
+            alg: Algorithm::RSA,
+        }
     }
 }
 
@@ -189,7 +197,7 @@ impl Token {
         ))
     }
 
-    fn verify_and_decrypt<T: for<'de> Deserialize<'de>>(
+    pub fn verify_and_decrypt<T: for<'de> Deserialize<'de>>(
         token: &String,
         public_key: &PKey<Public>,
         symmetric_key: &[u8],
@@ -220,7 +228,10 @@ impl Token {
                 }
             };
             if header.alg != Algorithm::RSASHA256 {
-                println!("Header algorithm doesn't match expected {}", Algorithm::RSASHA256);
+                println!(
+                    "Header algorithm doesn't match expected {}",
+                    Algorithm::RSASHA256
+                );
                 return Err(InternalError::Token(TokenError::HeadedUnexpectedAlgorithm).into());
             }
         }

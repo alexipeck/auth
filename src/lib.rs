@@ -17,6 +17,10 @@ pub mod serde;
 pub mod token;
 pub mod r#trait;
 pub mod user;
+#[path = "./flows/user_login.rs"]
+pub mod user_login;
+#[path = "./flows/user_setup.rs"]
+pub mod user_setup;
 
 ///hashes with blake3
 pub fn hash_string(data: &str) -> String {

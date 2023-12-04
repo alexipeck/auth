@@ -1,6 +1,7 @@
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 use rand_core::{OsRng, RngCore, SeedableRng};
+use serde::{Deserialize, Serialize};
 
 pub const TOKEN_CHARSET: [char; 88] = [
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
@@ -38,4 +39,9 @@ pub fn generate_random_base32_string(length: usize) -> String {
         key.push(CHARSET_BASE_32[rng.gen_range(0..CHARSET_BASE_32.len())]);
     }
     key
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JsonEncryptedDataWrapper {
+    pub data: String,
 }

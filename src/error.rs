@@ -91,6 +91,14 @@ pub enum TokenError {
     DataBytesToString(FromUtf8Error),
     #[error("DataDeserialisation({0})")]
     DataDeserialisation(SerdeError),
+    #[error("Expired")]
+    Expired,
+}
+
+#[derive(Error, Debug)]
+pub enum LoginError {
+    #[error("KeysDontMatch")]
+    KeysDontMatch,
 }
 
 #[derive(Error, Debug)]
@@ -137,6 +145,8 @@ pub enum InternalError {
     Startup(#[from] StartupError),
     #[error("Encryption({0})")]
     Encryption(#[from] EncryptionError),
+    #[error("Login({0})")]
+    Login(#[from] LoginError),
 }
 
 #[derive(Error, Debug)]

@@ -2,14 +2,26 @@ use blake3::Hasher;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+pub trait HashSaltDebug {
+    fn hash_salt_debug(&self, salt: Uuid) -> String;
+}
+
+impl<T: std::fmt::Debug> HashSaltDebug for T {
+    fn hash_salt_debug(&self, salt: Uuid) -> String {
+        let mut hasher = Hasher::new();
+        let _ = hasher.update(format!("{}{:?}", salt, self).as_bytes());
+        hasher.finalize().to_string()
+    }
+}
+
 pub trait HashDebug {
-    fn hash_debug(&self, salt: Uuid) -> String;
+    fn hash_debug(&self) -> String;
 }
 
 impl<T: std::fmt::Debug> HashDebug for T {
-    fn hash_debug(&self, salt: Uuid) -> String {
+    fn hash_debug(&self) -> String {
         let mut hasher = Hasher::new();
-        let _ = hasher.update(format!("{}{:?}", salt, self).as_bytes());
+        let _ = hasher.update(format!("{:?}", self).as_bytes());
         hasher.finalize().to_string()
     }
 }

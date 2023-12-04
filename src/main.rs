@@ -1,10 +1,7 @@
 use auth::auth_manager::AuthManager;
-use auth::bidirectional::LoginFlow;
-use auth::credentials::LoginCredentials;
-use auth::cryptography::generate_random_base32_string;
-use auth::response::{FullResponseData, ResponseData};
+use auth::cryptography::JsonEncryptedDataWrapper;
 use auth::serde::datetime_utc;
-use auth::token::Token;
+use auth::user_login::{init_login_flow, verify_login_flow, LoginCredentials};
 use axum::extract::ConnectInfo;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE};
 use axum::http::{HeaderMap, Method, StatusCode};
@@ -14,7 +11,6 @@ use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::{Authorization, Cookie};
 use axum_extra::TypedHeader;
 use chrono::{DateTime, Utc};
-use cookie::time::Duration;
 use directories::BaseDirs;
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
@@ -24,7 +20,6 @@ use std::sync::{atomic::AtomicBool, Arc};
 use tokio::net::TcpListener;
 use tokio::sync::Notify;
 use tower_http::cors::{AllowOrigin, CorsLayer};
-use tower_http::trace::TraceLayer;
 use tracing::level_filters::LevelFilter;
 use tracing::Level;
 use tracing_subscriber::layer::SubscriberExt;
@@ -59,58 +54,13 @@ enum Payload {
     Credentials(LoginCredentials),
 }
 
-async fn init_login_flow(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    /* TypedHeader(cookie): TypedHeader<Cookie>, */
-    /* TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>, */
-    /* Extension(security_manager): Extension<Arc<SecurityManager>>, */
-    Extension(auth_manager): Extension<Arc<AuthManager>>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    //println!("{:?}", headers);
-    //println!("{:?}", addr);
-    let (key, expiry) = auth_manager.setup_login_flow(&headers);
-    let login_flow = LoginFlow::new(key, expiry);
-    let token = match Token::create_signed_and_encrypted(&login_flow, auth_manager.encryption_keys.get_private_key(), auth_manager.encryption_keys.get_symmetric_key(), auth_manager.encryption_keys.get_iv()) {
-        Ok(token) => token,
-        Err(err) => {
-            println!("{}", err);
-            return FullResponseData::basic(ResponseData::InternalServerError)
-        },
-    };
-    FullResponseData::with_cookie(ResponseData::InitLoginFlow(login_flow), "login-flow".to_string(), token, Duration::minutes(5))
-}
-
-async fn verify_login_flow(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Extension(auth_manager): Extension<Arc<AuthManager>>,
-    headers: HeaderMap,
-    axum::response::Json(login_flow): axum::response::Json<LoginFlow>,
-) -> impl IntoResponse {
-    println!("{:?}", addr);
-    //println!("{:?}", headers);
-    /* println!("{:?}", cookie); */
-    //asdf;
-    return match auth_manager.verify_login_flow(&login_flow, &headers) {
-        Ok(valid) => {
-            if valid {
-                StatusCode::OK.into_response()
-            } else {
-                StatusCode::UNAUTHORIZED.into_response()
-            }
-        }
-        Err(err) => StatusCode::UNAUTHORIZED.into_response(),
-    };
-}
-
 async fn credentials(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
-    axum::response::Json(login_credentials): axum::response::Json<LoginCredentials>,
+    axum::response::Json(encrypted_credentials): axum::response::Json<JsonEncryptedDataWrapper>,
 ) -> impl IntoResponse {
     println!("{:?}", addr);
-    //asdf;
     //println!("{:?}", headers);
     /* println!("{:?}", cookie);
     println!("{:?}", authorisation); */
@@ -203,7 +153,7 @@ pub async fn run_rest_server(
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //println!("{:?}", generate_random_base32_string(64));
     let cookie_name: String = "uamtoken".to_string(); //This won't exist and will be passed down from AuthManager
-    let allowed_origin: String = "http://dev.clouduam.com:81".to_owned();
+    let allowed_origin: String = "http://dev.clouduam.com:81".to_owned(); //https://clouduam.com
 
     let base_dirs = BaseDirs::new().unwrap();
     let log_path = base_dirs.config_dir().join("auth/logs/");

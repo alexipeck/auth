@@ -1,13 +1,7 @@
 use email_address::EmailAddress;
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
-pub struct LoginCredentials {
-    key: String,
-    email: EmailAddress,
-    password: String,
-    two_fa_code: [u8; 6],
-}
+use crate::user_login::LoginCredentials;
 
 #[derive(Debug, Deserialize)]
 pub struct TwoTokens {

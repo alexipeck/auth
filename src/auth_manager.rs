@@ -1,15 +1,17 @@
 use crate::{
-    bidirectional::LoginFlow,
     cryptography::generate_token,
     error::{
-        AccountSetupError, AuthFlowError, AuthenticationError, Error, InternalError, StartupError, EncryptionError, OpenSSLError,
+        AccountSetupError, AuthenticationError, EncryptionError, Error, InternalError, LoginError,
+        OpenSSLError, StartupError, TokenError,
     },
     filter_headers_into_btreeset,
-    r#trait::{Expired, HashDebug},
+    r#trait::HashDebug,
+    token::Token,
     user::User,
+    user_login::LoginFlow,
 };
 use axum::http::{HeaderMap, HeaderValue};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use email_address::EmailAddress;
 use google_authenticator::GoogleAuthenticator;
 use openssl::{
@@ -93,46 +95,82 @@ impl Config {
 }
 
 pub struct EncryptionKeys {
+    signing_private_key: PKey<Private>,
+    signing_public_key: PKey<Public>,
     private_key: PKey<Private>,
     public_key: PKey<Public>,
-    symmetric_key: [u8; 32],
-    iv: [u8; 16],
+    symmetric_key: [u8; 32], // 256-bit key for AES-256
+    iv: [u8; 16],            // 128-bit IV for AES
 }
 
 impl EncryptionKeys {
     pub fn new() -> Result<Self, Error> {
-        let rsa: Rsa<Private> = match Rsa::generate(2048) {
-            Ok(rsa) => rsa,
-            Err(err) => return Err(InternalError::Encryption(EncryptionError::GeneratingRSABase(OpenSSLError(err))).into()),
-        };
-        let private_key: PKey<Private> = match PKey::from_rsa(rsa.clone()) {
-            Ok(private_key) => private_key,
-            Err(err) => return Err(InternalError::Encryption(EncryptionError::GeneratingRSAPrivate(OpenSSLError(err))).into()),
-        };
-        let public_key_pem: Vec<u8> = match rsa.public_key_to_pem() {
-            Ok(public_key_pem) => public_key_pem,
-            Err(err) => return Err(InternalError::Encryption(EncryptionError::GeneratingRSAPublicPEM(OpenSSLError(err))).into()),
-        };
-        let public_key: PKey<Public> = match PKey::public_key_from_pem(&public_key_pem) {
-            Ok(public_key) => public_key,
-            Err(err) => return Err(InternalError::Encryption(EncryptionError::GeneratingRSAPublic(OpenSSLError(err))).into()),
-        };
-        let symmetric_key: [u8; 32] = rand::thread_rng().gen(); // 256-bit key for AES-256
-        let iv: [u8; 16] = rand::thread_rng().gen(); // 128-bit IV for AES
+        let (public_key, private_key) = Self::generate_asymmetric_keys()?;
+        let (signing_public_key, signing_private_key) = Self::generate_asymmetric_keys()?;
         Ok(Self {
+            signing_private_key,
+            signing_public_key,
             private_key,
             public_key,
-            symmetric_key,
-            iv,
+            symmetric_key: rand::thread_rng().gen(),
+            iv: rand::thread_rng().gen(),
         })
     }
 
+    pub fn generate_asymmetric_keys() -> Result<(PKey<Public>, PKey<Private>), Error> {
+        let rsa: Rsa<Private> = match Rsa::generate(2048) {
+            Ok(rsa) => rsa,
+            Err(err) => {
+                return Err(
+                    InternalError::Encryption(EncryptionError::GeneratingRSABase(OpenSSLError(
+                        err,
+                    )))
+                    .into(),
+                )
+            }
+        };
+        let private_key = match PKey::from_rsa(rsa.clone()) {
+            Ok(private_key) => private_key,
+            Err(err) => {
+                return Err(
+                    InternalError::Encryption(EncryptionError::GeneratingRSAPrivate(OpenSSLError(
+                        err,
+                    )))
+                    .into(),
+                )
+            }
+        };
+        let public_key_pem: Vec<u8> = match rsa.public_key_to_pem() {
+            Ok(public_key_pem) => public_key_pem,
+            Err(err) => {
+                return Err(
+                    InternalError::Encryption(EncryptionError::GeneratingRSAPublicPEM(
+                        OpenSSLError(err),
+                    ))
+                    .into(),
+                )
+            }
+        };
+        let public_key = match PKey::public_key_from_pem(&public_key_pem) {
+            Ok(public_key) => public_key,
+            Err(err) => {
+                return Err(
+                    InternalError::Encryption(EncryptionError::GeneratingRSAPublic(OpenSSLError(
+                        err,
+                    )))
+                    .into(),
+                )
+            }
+        };
+        Ok((public_key, private_key))
+    }
+
     pub fn get_private_key(&self) -> &PKey<Private> {
-        &self.private_key
+        &self.signing_private_key
     }
 
     pub fn get_public_key(&self) -> &PKey<Public> {
-        &self.public_key
+        &self.signing_public_key
     }
 
     pub fn get_symmetric_key(&self) -> &[u8; 32] {
@@ -146,8 +184,6 @@ impl EncryptionKeys {
 
 pub struct AuthManager {
     auth_lifetime: Duration,
-
-    login_flows: Arc<RwLock<HashMap<String, (Uuid, DateTime<Utc>)>>>,
     users: Arc<RwLock<HashMap<Uuid, User>>>,
     email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>>,
 
@@ -161,9 +197,7 @@ impl AuthManager {
         let allowed_origin: HeaderValue = match allowed_origin.parse() {
             Ok(allowed_origin) => allowed_origin,
             Err(err) => {
-                return Err(
-                    InternalError::Startup(StartupError::InvalidOrigin(err.into())).into(),
-                )
+                return Err(InternalError::Startup(StartupError::InvalidOrigin(err.into())).into())
             }
         };
         let email_to_id_registry = Arc::new(RwLock::new(HashMap::new()));
@@ -176,10 +210,9 @@ impl AuthManager {
             users.write().insert(*debug_user.get_id(), debug_user);
             email_to_id_registry.write().insert(email, user_id);
         }
-        
+
         let encryption_keys = EncryptionKeys::new()?;
         Ok(Self {
-            login_flows: Arc::new(RwLock::new(HashMap::new())),
             auth_lifetime: Duration::minutes(5),
             users,
             email_to_id_registry,
@@ -192,46 +225,41 @@ impl AuthManager {
 }
 
 impl AuthManager {
-    pub fn setup_login_flow(&self, headers: &HeaderMap) -> (String, DateTime<Utc>) {
+    pub fn setup_login_flow(&self, headers: &HeaderMap) -> Result<LoginFlow, Error> {
         let headers =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
-        let salt: Uuid = Uuid::new_v4();
-        let key: String = headers.hash_debug(salt);
+
+        let key: String = headers.hash_debug();
         let expiry = Utc::now() + self.auth_lifetime;
-        self.login_flows
-            .write()
-            .insert(key.to_owned(), (salt, expiry.to_owned()));
-        (key, expiry)
+        let login_flow: LoginFlow = LoginFlow::new(key, expiry);
+        Ok(LoginFlow::new(
+            Token::create_signed_and_encrypted(
+                &login_flow,
+                self.encryption_keys.get_private_key(),
+                self.encryption_keys.get_symmetric_key(),
+                self.encryption_keys.get_iv(),
+            )?,
+            expiry,
+        ))
     }
-    pub fn verify_login_flow(
-        &self,
-        login_flow: &LoginFlow,
-        headers: &HeaderMap,
-    ) -> Result<bool, Error> {
-        if let Some((salt, expiry)) = self.login_flows.read().get(login_flow.get_key()) {
-            if expiry.expired() {
-                return Err(InternalError::AuthFlow(AuthFlowError::Expired).into());
-            }
-            let headers =
-                filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
-            let regenerated_key = headers.hash_debug(*salt);
-            return Ok(&regenerated_key == login_flow.get_key());
+    pub fn verify_login_flow(&self, token: String, headers: &HeaderMap) -> Result<(), Error> {
+        let login_flow = Token::verify_and_decrypt::<LoginFlow>(
+            &token,
+            self.encryption_keys.get_public_key(),
+            self.encryption_keys.get_symmetric_key(),
+            self.encryption_keys.get_iv(),
+        )?;
+        if login_flow.expired() {
+            return Err(InternalError::Token(TokenError::Expired).into());
         }
-        Err(InternalError::AuthFlow(AuthFlowError::Invalid).into())
-    }
-    pub fn remove_expired_auth_flows(&self) {
-        let mut keys = Vec::new();
-        {
-            for (key, (_, expiry)) in self.login_flows.read().iter() {
-                if expiry.expired() {
-                    keys.push(key.to_owned());
-                }
-            }
+        let headers =
+            filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
+
+        let key: String = headers.hash_debug();
+        if &key != login_flow.get_key() {
+            return Err(InternalError::Login(LoginError::KeysDontMatch).into());
         }
-        let mut auth_flows_write_lock = self.login_flows.write();
-        for key in keys.iter() {
-            let _ = auth_flows_write_lock.remove(key);
-        }
+        Ok(())
     }
 
     pub fn generate_user_uid(&self) -> Uuid {
@@ -269,22 +297,10 @@ impl AuthManager {
             hashed_and_salted_password,
             two_fa_client_secret,
         );
-        /* let mut data_connection = establish_connection(DBSource::AgentManager);
-        if let Err(err) = save_authorisation_profile(&mut data_connection, &authorisation) {
-            warn!("{}", err);
-        }
-        if let Err(err) = save_user(&mut data_connection, &user) {
-            panic!("{}", err);
-        } */
-
-        /* self.authorisations
-        .write()
-        .insert(authorisation_uid, authorisation); */
         self.email_to_id_registry
             .write()
             .insert(email, user.get_id().to_owned());
         self.users.write().insert(user.get_id().to_owned(), user);
-        //TODO: Send this user to authenticated clients to update in the list without reload
         Ok(())
     }
 
