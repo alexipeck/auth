@@ -1,20 +1,19 @@
 use crate::{
     auth_manager::AuthManager,
     r#trait::Expired,
-    response::{FullResponseData, ResponseData},
+    response::{FullResponseData, ResponseData, PublicKey},
     serde::datetime_utc,
 };
 use axum::{
     extract::ConnectInfo,
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     response::IntoResponse,
     Extension,
 };
 use chrono::{DateTime, Utc};
-use cookie::time::Duration;
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, str::from_utf8};
 use tracing::warn;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -79,10 +78,12 @@ pub async fn verify_login_flow(
     //println!("{:?}", headers);
     /* println!("{:?}", cookie); */
     return match auth_manager.verify_login_flow(login_flow.get_key().to_string(), &headers) {
-        Ok(_) => StatusCode::OK.into_response(),
+        Ok(_) => {
+            FullResponseData::basic(ResponseData::PublicKey(PublicKey { public_key: from_utf8(&auth_manager.encryption_keys.get_public_encryption_key().public_key_to_pem().unwrap()).unwrap().to_string() }))//TODO: Add error handling
+        },
         Err(err) => {
             warn!("{}", err);
-            StatusCode::UNAUTHORIZED.into_response()
+            FullResponseData::basic(ResponseData::Unauthorised)
         }
     };
 }

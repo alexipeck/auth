@@ -165,12 +165,20 @@ impl EncryptionKeys {
         Ok((public_key, private_key))
     }
 
-    pub fn get_private_key(&self) -> &PKey<Private> {
+    pub fn get_private_signing_key(&self) -> &PKey<Private> {
         &self.signing_private_key
     }
 
-    pub fn get_public_key(&self) -> &PKey<Public> {
+    pub fn get_public_signing_key(&self) -> &PKey<Public> {
         &self.signing_public_key
+    }
+
+    pub fn get_public_encryption_key(&self) -> &PKey<Public> {
+        &self.public_key
+    }
+
+    pub fn get_private_decryption_key(&self) -> &PKey<Private> {
+        &self.private_key
     }
 
     pub fn get_symmetric_key(&self) -> &[u8; 32] {
@@ -236,7 +244,7 @@ impl AuthManager {
             Token::create_signed_and_encrypted(
                 login_flow,
                 expiry,
-                self.encryption_keys.get_private_key(),
+                self.encryption_keys.get_private_signing_key(),
                 self.encryption_keys.get_symmetric_key(),
                 self.encryption_keys.get_iv(),
             )?,
@@ -246,7 +254,7 @@ impl AuthManager {
     pub fn verify_login_flow(&self, token: String, headers: &HeaderMap) -> Result<(), Error> {
         let login_flow = Token::verify_and_decrypt::<LoginFlow>(
             &token,
-            self.encryption_keys.get_public_key(),
+            self.encryption_keys.get_public_signing_key(),
             self.encryption_keys.get_symmetric_key(),
             self.encryption_keys.get_iv(),
         )?;

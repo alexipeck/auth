@@ -38,12 +38,19 @@ pub struct UserAuthenticated {
 }
 
 #[derive(Debug, Serialize)]
+pub struct PublicKey {
+    pub public_key: String,
+}
+
+#[derive(Debug, Serialize)]
 pub enum ResponseData {
     InitLoginFlow(LoginFlow),
     UserAuthenticated(UserAuthenticated),
+    PublicKey(PublicKey),
     /* AccountSetup() */
     CredentialsRejected,
     InternalServerError,
+    Unauthorised,
 }
 
 pub struct FullResponseData {
@@ -75,8 +82,8 @@ impl FullResponseData {
 impl IntoResponse for FullResponseData {
     fn into_response(self) -> axum::response::Response {
         let status_code = match self.response_data {
-            ResponseData::InitLoginFlow(_) | ResponseData::UserAuthenticated(_) => StatusCode::OK,
-            ResponseData::CredentialsRejected => StatusCode::UNAUTHORIZED,
+            ResponseData::InitLoginFlow(_) | ResponseData::UserAuthenticated(_) | ResponseData::PublicKey(_) => StatusCode::OK,
+            ResponseData::CredentialsRejected | ResponseData::Unauthorised => StatusCode::UNAUTHORIZED,
             ResponseData::InternalServerError => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
