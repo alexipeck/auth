@@ -231,10 +231,11 @@ impl AuthManager {
 
         let key: String = headers.hash_debug();
         let expiry = Utc::now() + self.auth_lifetime;
-        let login_flow: LoginFlow = LoginFlow::new(key, expiry);
+        let login_flow: LoginFlow = LoginFlow::new(key, expiry.to_owned());
         Ok(LoginFlow::new(
             Token::create_signed_and_encrypted(
-                &login_flow,
+                login_flow,
+                expiry,
                 self.encryption_keys.get_private_key(),
                 self.encryption_keys.get_symmetric_key(),
                 self.encryption_keys.get_iv(),
@@ -249,9 +250,6 @@ impl AuthManager {
             self.encryption_keys.get_symmetric_key(),
             self.encryption_keys.get_iv(),
         )?;
-        if login_flow.expired() {
-            return Err(InternalError::Token(TokenError::Expired).into());
-        }
         let headers =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
 

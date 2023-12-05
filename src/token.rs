@@ -1,17 +1,20 @@
 use std::fmt;
 
-use crate::error::{
+use crate::{error::{
     Base64DecodeError, Error, FromUtf8Error, InternalError, OpenSSLError, SerdeError, TokenError,
-};
+}, r#trait::Expired};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use chrono::{DateTime, Utc};
 use openssl::{
     hash::MessageDigest,
     pkey::{PKey, Private, Public},
     sign::{Signer, Verifier},
     symm::{decrypt, encrypt, Cipher},
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tracing::warn;
+use uuid::Uuid;
+use crate::serde::datetime_utc;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Algorithm {
@@ -50,16 +53,26 @@ impl Header {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct TokenWrapper<T> {
+    pub data: T,
+    #[serde(with = "datetime_utc")]
+    pub expiry: DateTime<Utc>,
+    pub _salt: Uuid,
+}
+
 #[derive(Debug, Clone)]
 pub struct Token {}
 
 impl Token {
-    pub fn create_signed<T: Serialize>(
-        data: &T,
+    pub fn create_signed<T: Serialize + DeserializeOwned>(
+        data: T,
+        expiry: DateTime<Utc>,
         private_key: &PKey<Private>,
     ) -> Result<String, Error> {
-        let serialised_data_base64 = {
-            let serialised_data = match serde_json::to_string(data) {
+        let serialised_data_base64: String = {
+            let data: TokenWrapper<T> = TokenWrapper { data, expiry, _salt: Uuid::new_v4() };
+            let serialised_data: String = match serde_json::to_string(&data) {
                 Ok(serialised_data) => serialised_data,
                 Err(err) => {
                     warn!("{}", err);
@@ -117,14 +130,16 @@ impl Token {
             header_base64, serialised_data_base64, signature_base64
         ))
     }
-    pub fn create_signed_and_encrypted<T: Serialize>(
-        data: &T,
+    pub fn create_signed_and_encrypted<T: Serialize + DeserializeOwned>(
+        data: T,
+        expiry: DateTime<Utc>,
         private_key: &PKey<Private>,
         symmetric_key: &[u8],
         iv: &[u8],
     ) -> Result<String, Error> {
-        let encrypted_data_base64 = {
-            let serialised_data = match serde_json::to_string(data) {
+        let encrypted_data_base64: String = {
+            let data: TokenWrapper<T> = TokenWrapper { data, expiry, _salt: Uuid::new_v4() };
+            let serialised_data: String = match serde_json::to_string(&data) {
                 Ok(serialised_data) => serialised_data,
                 Err(err) => {
                     warn!("{}", err);
@@ -133,7 +148,7 @@ impl Token {
                     );
                 }
             };
-            let encrypted_data = match encrypt(
+            let encrypted_data: Vec<u8> = match encrypt(
                 Cipher::aes_256_cbc(),
                 symmetric_key,
                 Some(iv),
@@ -149,8 +164,8 @@ impl Token {
             };
             URL_SAFE_NO_PAD.encode(&encrypted_data)
         };
-        let header_base64 = {
-            let header_str = match serde_json::to_string(&Header::signed_encrypted()) {
+        let header_base64: String = {
+            let header_str: String = match serde_json::to_string(&Header::signed_encrypted()) {
                 Ok(header_str) => header_str,
                 Err(err) => {
                     warn!("{}", err);
@@ -161,7 +176,7 @@ impl Token {
             };
             URL_SAFE_NO_PAD.encode(&header_str)
         };
-        let signature_base64 = {
+        let signature_base64: String = {
             let mut signer = match Signer::new(MessageDigest::sha256(), private_key) {
                 Ok(signer) => signer,
                 Err(err) => {
@@ -179,7 +194,7 @@ impl Token {
                 warn!("{}", err);
                 return Err(InternalError::Token(TokenError::FeedSigner(OpenSSLError(err))).into());
             }
-            let signature = match signer.sign_to_vec() {
+            let signature: Vec<u8> = match signer.sign_to_vec() {
                 Ok(signature) => signature,
                 Err(err) => {
                     warn!("{}", err);
@@ -197,7 +212,7 @@ impl Token {
         ))
     }
 
-    pub fn verify_and_decrypt<T: for<'de> Deserialize<'de>>(
+    pub fn verify_and_decrypt<T: Serialize + DeserializeOwned>(
         token: &String,
         public_key: &PKey<Public>,
         symmetric_key: &[u8],
@@ -209,7 +224,7 @@ impl Token {
         }
 
         {
-            let header_str_bytes = match URL_SAFE_NO_PAD.decode(parts[0]) {
+            let header_str_bytes: Vec<u8> = match URL_SAFE_NO_PAD.decode(parts[0]) {
                 Ok(header_str_bytes) => header_str_bytes,
                 Err(err) => {
                     return Err(InternalError::Token(TokenError::HeaderBase64Decode(
@@ -237,7 +252,7 @@ impl Token {
         }
 
         {
-            let signature_bytes = match URL_SAFE_NO_PAD.decode(parts[2]) {
+            let signature_bytes: Vec<u8> = match URL_SAFE_NO_PAD.decode(parts[2]) {
                 Ok(signature_bytes) => signature_bytes,
                 Err(err) => {
                     return Err(InternalError::Token(TokenError::SignatureBase64Decode(
@@ -247,7 +262,7 @@ impl Token {
                 }
             };
 
-            let mut verifier = match Verifier::new(MessageDigest::sha256(), public_key) {
+            let mut verifier: Verifier<'_> = match Verifier::new(MessageDigest::sha256(), public_key) {
                 Ok(verifier) => verifier,
                 Err(err) => {
                     return Err(
@@ -266,7 +281,7 @@ impl Token {
                     InternalError::Token(TokenError::FeedVerifier(OpenSSLError(err))).into(),
                 );
             }
-            let verified = match verifier.verify(&signature_bytes) {
+            let verified: bool = match verifier.verify(&signature_bytes) {
                 Ok(verified) => verified,
                 Err(err) => {
                     return Err(
@@ -280,7 +295,7 @@ impl Token {
             }
         }
 
-        let encrypted_payload = match URL_SAFE_NO_PAD.decode(parts[1]) {
+        let encrypted_payload: Vec<u8> = match URL_SAFE_NO_PAD.decode(parts[1]) {
             Ok(encrypted_payload) => encrypted_payload,
             Err(err) => {
                 return Err(InternalError::Token(TokenError::PayloadBase64Decode(
@@ -290,8 +305,8 @@ impl Token {
             }
         };
 
-        let cipher = Cipher::aes_256_cbc();
-        let decrypted_data = match decrypt(cipher, symmetric_key, Some(iv), &encrypted_payload) {
+        let cipher: Cipher = Cipher::aes_256_cbc();
+        let decrypted_data: Vec<u8> = match decrypt(cipher, symmetric_key, Some(iv), &encrypted_payload) {
             Ok(decrypted_data) => decrypted_data,
             Err(err) => {
                 return Err(
@@ -300,7 +315,7 @@ impl Token {
             }
         };
 
-        let decrypted_data_str = match String::from_utf8(decrypted_data) {
+        let decrypted_data_str: String = match String::from_utf8(decrypted_data) {
             Ok(decrypted_data_str) => decrypted_data_str,
             Err(err) => {
                 return Err(
@@ -309,7 +324,7 @@ impl Token {
             }
         };
 
-        let decrypted_data_struct = match serde_json::from_str(&decrypted_data_str) {
+        let decrypted_data_struct: TokenWrapper<T> = match serde_json::from_str::<TokenWrapper<T>>(&decrypted_data_str) {
             Ok(decrypted_data_struct) => decrypted_data_struct,
             Err(err) => {
                 return Err(
@@ -318,6 +333,10 @@ impl Token {
             }
         };
 
-        Ok(decrypted_data_struct)
+        if decrypted_data_struct.expiry.expired() {
+            return Err(InternalError::Token(TokenError::Expired).into())
+        }
+
+        Ok(decrypted_data_struct.data)
     }
 }

@@ -11,18 +11,17 @@ use axum::{
     Extension,
 };
 use chrono::{DateTime, Utc};
+use cookie::time::Duration;
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
-use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginFlow {
-    key: String, //either token or encrypted Self depending on usage
+    key: String,
     #[serde(with = "datetime_utc")]
-    expiry: DateTime<Utc>,
-    _salt: Uuid,
+    expiry: DateTime<Utc>,//only needed for the client, actual expiry is handled within token and verify_and_decrypt()
 }
 
 impl LoginFlow {
@@ -30,7 +29,6 @@ impl LoginFlow {
         Self {
             key,
             expiry,
-            _salt: Uuid::new_v4(),
         }
     }
 
@@ -61,7 +59,7 @@ pub async fn init_login_flow(
 ) -> impl IntoResponse {
     //println!("{:?}", headers);
     //println!("{:?}", addr);
-    let login_flow = match auth_manager.setup_login_flow(&headers) {
+    let login_flow: LoginFlow = match auth_manager.setup_login_flow(&headers) {
         Ok(token) => token,
         Err(err) => {
             warn!("{}", err);
@@ -80,7 +78,6 @@ pub async fn verify_login_flow(
     println!("{:?}", addr);
     //println!("{:?}", headers);
     /* println!("{:?}", cookie); */
-    //asdf;
     return match auth_manager.verify_login_flow(login_flow.get_key().to_string(), &headers) {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => {
