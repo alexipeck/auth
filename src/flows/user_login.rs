@@ -6,7 +6,7 @@ use crate::{
 };
 use axum::{
     extract::ConnectInfo,
-    http::HeaderMap,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Extension,
 };
@@ -42,10 +42,15 @@ impl LoginFlow {
 
 #[derive(Debug, Deserialize)]
 pub struct LoginCredentials {
-    key: String,
     email: EmailAddress,
     password: String,
     two_fa_code: [u8; 6],
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UserLogin {
+    key: String,
+    encrypted_credentials: String,
 }
 
 pub async fn init_login_flow(
@@ -84,6 +89,28 @@ pub async fn verify_login_flow(
         Err(err) => {
             warn!("{}", err);
             FullResponseData::basic(ResponseData::Unauthorised)
+        }
+    };
+}
+
+pub async fn login_with_credentials(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Extension(auth_manager): Extension<Arc<AuthManager>>,
+    headers: HeaderMap,
+    axum::response::Json(user_login): axum::response::Json<UserLogin>,
+) -> impl IntoResponse {
+    println!("{:?}", addr);
+    //println!("{:?}", headers);
+    /* println!("{:?}", cookie); */
+    return match auth_manager.verify_login_flow(user_login.key, &headers) {
+        Ok(_) => {
+            //TODO: Decrypt credentials
+            StatusCode::OK.into_response()
+        },
+        Err(err) => {
+            warn!("{}", err);
+            /* FullResponseData::basic(ResponseData::Unauthorised) */
+            StatusCode::UNAUTHORIZED.into_response()
         }
     };
 }

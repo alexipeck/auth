@@ -11,4 +11,5 @@ pub struct UserInvite {
     #[serde(with = "datetime_utc")]
     expiry: DateTime<Utc>,
     _salt: Uuid,
+    __salt: Uuid,
 }

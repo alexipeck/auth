@@ -59,6 +59,7 @@ struct TokenWrapper<T> {
     #[serde(with = "datetime_utc")]
     pub expiry: DateTime<Utc>,
     pub _salt: Uuid,
+    pub __salt: Uuid,
 }
 
 #[derive(Debug, Clone)]
@@ -71,7 +72,7 @@ impl Token {
         private_key: &PKey<Private>,
     ) -> Result<String, Error> {
         let serialised_data_base64: String = {
-            let data: TokenWrapper<T> = TokenWrapper { data, expiry, _salt: Uuid::new_v4() };
+            let data: TokenWrapper<T> = TokenWrapper { data, expiry, _salt: Uuid::new_v4(), __salt: Uuid::new_v4() };
             let serialised_data: String = match serde_json::to_string(&data) {
                 Ok(serialised_data) => serialised_data,
                 Err(err) => {
@@ -138,7 +139,7 @@ impl Token {
         iv: &[u8],
     ) -> Result<String, Error> {
         let encrypted_data_base64: String = {
-            let data: TokenWrapper<T> = TokenWrapper { data, expiry, _salt: Uuid::new_v4() };
+            let data: TokenWrapper<T> = TokenWrapper { data, expiry, _salt: Uuid::new_v4(), __salt: Uuid::new_v4() };
             let serialised_data: String = match serde_json::to_string(&data) {
                 Ok(serialised_data) => serialised_data,
                 Err(err) => {

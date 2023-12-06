@@ -1,7 +1,7 @@
 use auth::auth_manager::AuthManager;
 use auth::cryptography::JsonEncryptedDataWrapper;
 use auth::serde::datetime_utc;
-use auth::user_login::{init_login_flow, verify_login_flow, LoginCredentials};
+use auth::user_login::{init_login_flow, verify_login_flow, LoginCredentials, login_with_credentials};
 use axum::extract::ConnectInfo;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE};
 use axum::http::{HeaderMap, Method, StatusCode};
@@ -49,12 +49,12 @@ struct AccountSetup {
     two_fa_code: [u8; 6],
 }
 
-#[derive(Debug, Deserialize)]
+/* #[derive(Debug, Deserialize)]
 enum Payload {
     Credentials(LoginCredentials),
-}
+} */
 
-async fn credentials(
+/* async fn credentials(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
@@ -77,7 +77,7 @@ async fn credentials(
     }; */
 
     panic!();
-}
+} */
 
 async fn verify_auth(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -128,7 +128,7 @@ pub async fn run_rest_server(
         .route("/login/init-login-flow", get(init_login_flow))
         .route("/verify-auth", post(verify_auth))
         .route("/verify-login-flow", post(verify_login_flow))
-        .route("/login/credentials", post(credentials))
+        .route("/login/credentials", post(login_with_credentials))
         /* .route("/logout", post(logout)) */
         /* .layer(TraceLayer::new_for_http()) */
         .layer(cors)
