@@ -102,6 +102,16 @@ pub enum LoginError {
 }
 
 #[derive(Error, Debug)]
+pub enum ClientPayloadError {
+    #[error("UrlSafeBase64Decode({0})")]
+    UrlSafeBase64Decode(Base64DecodeError),
+    #[error("DataBytesToString({0})")]
+    DataBytesToString(FromUtf8Error),
+    #[error("DataDeserialisation({0})")]
+    DataDeserialisation(SerdeError),
+}
+
+#[derive(Error, Debug)]
 pub enum AccountSetupError {
     #[error("InvalidPassword")]
     InvalidPassword,
@@ -129,6 +139,10 @@ pub enum EncryptionError {
     GeneratingRSAPublic(OpenSSLError),
     #[error("GeneratingRSAPublicPEM({0})")]
     GeneratingRSAPublicPEM(OpenSSLError),
+    #[error("RSAPrivateConversion({0})")]
+    RSAPrivateConversion(OpenSSLError),
+    #[error("DataDecryption({0})")]
+    DataDecryption(OpenSSLError),
 }
 
 #[derive(Error, Debug)]
@@ -145,6 +159,8 @@ pub enum InternalError {
     Startup(#[from] StartupError),
     #[error("Encryption({0})")]
     Encryption(#[from] EncryptionError),
+    #[error("ClientPayload({0})")]
+    ClientPayload(#[from] ClientPayloadError),
     #[error("Login({0})")]
     Login(#[from] LoginError),
 }

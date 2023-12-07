@@ -2,7 +2,7 @@ use crate::{
     auth_manager::AuthManager,
     r#trait::Expired,
     response::{FullResponseData, ResponseData, PublicKey},
-    serde::datetime_utc,
+    serde::datetime_utc, cryptography::decrypt_url_safe_base64_with_private_key,
 };
 use axum::{
     extract::ConnectInfo,
@@ -44,7 +44,7 @@ impl LoginFlow {
 pub struct LoginCredentials {
     email: EmailAddress,
     password: String,
-    two_fa_code: [u8; 6],
+    two_fa_code: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,7 +104,14 @@ pub async fn login_with_credentials(
     /* println!("{:?}", cookie); */
     return match auth_manager.verify_login_flow(user_login.key, &headers) {
         Ok(_) => {
-            //TODO: Decrypt credentials
+            let data = match decrypt_url_safe_base64_with_private_key::<LoginCredentials>(user_login.encrypted_credentials, &auth_manager.encryption_keys.get_private_decryption_key()) {
+                Ok(data) => data,
+                Err(err) => {
+                    warn!("{}", err);
+                    return StatusCode::BAD_REQUEST.into_response()
+                },
+            };
+            println!("{:?}", data);
             StatusCode::OK.into_response()
         },
         Err(err) => {

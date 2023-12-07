@@ -1,7 +1,11 @@
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use openssl::{pkey::{PKey, Private}, rsa::Padding};
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 use rand_core::{OsRng, RngCore, SeedableRng};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+use crate::error::{Error, InternalError, LoginError, Base64DecodeError, FromUtf8Error, ClientPayloadError, SerdeError, EncryptionError, OpenSSLError};
 
 pub const TOKEN_CHARSET: [char; 88] = [
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
@@ -44,4 +48,45 @@ pub fn generate_random_base32_string(length: usize) -> String {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JsonEncryptedDataWrapper {
     pub data: String,
+}
+
+pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(encrypted_url_safe_base64_data: String, private_key: &PKey<Private>) -> Result<T, Error> {
+    let encrypted_credentials_bytes: Vec<u8> = match URL_SAFE_NO_PAD.decode(encrypted_url_safe_base64_data) {
+        Ok(encrypted_data_bytes) => encrypted_data_bytes,
+        Err(err) => {
+            return Err(InternalError::ClientPayload(ClientPayloadError::UrlSafeBase64Decode(Base64DecodeError(err)))
+            .into())
+        }
+    };
+    let mut decrypted_data_buffer = vec![0; private_key.size()];
+
+    let rsa_private = match private_key.rsa() {
+        Ok(rsa_private) => rsa_private,
+        Err(err) => return Err(InternalError::Encryption(EncryptionError::RSAPrivateConversion(OpenSSLError(err))).into()),
+    };
+    let decrypted_data_len = match rsa_private.private_decrypt(&encrypted_credentials_bytes, &mut decrypted_data_buffer, Padding::PKCS1_OAEP) {
+        Ok(decrypted_data_len) => decrypted_data_len,
+        Err(err) => return Err(InternalError::Encryption(EncryptionError::DataDecryption(OpenSSLError(err))).into())
+    };
+    decrypted_data_buffer.truncate(decrypted_data_len);
+    
+    let decrypted_data_str: String = match String::from_utf8(decrypted_data_buffer) {
+        Ok(decrypted_data_str) => decrypted_data_str,
+        Err(err) => {
+            return Err(
+                InternalError::ClientPayload(ClientPayloadError::DataBytesToString(FromUtf8Error(err))).into(),
+            )
+        }
+    };
+
+    let decrypted_data_struct: T = match serde_json::from_str::<T>(&decrypted_data_str) {
+        Ok(decrypted_data_struct) => decrypted_data_struct,
+        Err(err) => {
+            return Err(
+                InternalError::ClientPayload(ClientPayloadError::DataDeserialisation(SerdeError(err))).into(),
+            )
+        }
+    };
+
+    Ok(decrypted_data_struct)
 }
