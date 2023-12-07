@@ -2,7 +2,7 @@ use crate::{
     auth_manager::AuthManager,
     r#trait::Expired,
     response::{FullResponseData, ResponseData, PublicKey},
-    serde::datetime_utc, cryptography::decrypt_url_safe_base64_with_private_key,
+    serde::datetime_utc, cryptography::decrypt_url_safe_base64_with_private_key, token::Token, user_session::{UserSession, UserAccessToken, AccessLevel},
 };
 use axum::{
     extract::ConnectInfo,
@@ -104,15 +104,29 @@ pub async fn login_with_credentials(
     /* println!("{:?}", cookie); */
     return match auth_manager.verify_login_flow(user_login.key, &headers) {
         Ok(_) => {
-            let data = match decrypt_url_safe_base64_with_private_key::<LoginCredentials>(user_login.encrypted_credentials, &auth_manager.encryption_keys.get_private_decryption_key()) {
-                Ok(data) => data,
+            let credentials: LoginCredentials = match decrypt_url_safe_base64_with_private_key::<LoginCredentials>(user_login.encrypted_credentials, &auth_manager.encryption_keys.get_private_decryption_key()) {
+                Ok(credentials) => credentials,
                 Err(err) => {
                     warn!("{}", err);
                     return StatusCode::BAD_REQUEST.into_response()
                 },
             };
-            println!("{:?}", data);
-            StatusCode::OK.into_response()
+            let user_id = match auth_manager.validate_user_credentials(&credentials.email, &credentials.password, credentials.two_fa_code) {
+                Ok(user_id) => user_id,
+                Err(err) => {
+                    warn!("{}", err);
+                    return StatusCode::UNAUTHORIZED.into_response()
+                }
+            };
+            let user_session = match UserSession::create_from_user_id(user_id, auth_manager.encryption_keys.get_private_signing_key(), auth_manager.encryption_keys.get_symmetric_key(), auth_manager.encryption_keys.get_iv()) {
+                Ok(user_session) => user_session,
+                Err(err) => {
+                    warn!("{}", err);
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            };
+            println!("User {} authenticated.", user_id);
+            return FullResponseData::basic(ResponseData::UserSession(user_session)).into_response()
         },
         Err(err) => {
             warn!("{}", err);

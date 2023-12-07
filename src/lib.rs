@@ -21,6 +21,7 @@ pub mod user;
 pub mod user_login;
 #[path = "./flows/user_setup.rs"]
 pub mod user_setup;
+pub mod user_session;
 
 ///hashes with blake3
 pub fn hash_string(data: &str) -> String {

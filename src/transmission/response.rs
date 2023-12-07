@@ -1,4 +1,4 @@
-use crate::{serde::datetime_utc, user_login::LoginFlow};
+use crate::{serde::datetime_utc, user_login::LoginFlow, user_session::UserSession};
 use axum::{
     body::Body,
     http::{header::CONTENT_SECURITY_POLICY, response::Builder, StatusCode},
@@ -47,6 +47,7 @@ pub enum ResponseData {
     InitLoginFlow(LoginFlow),
     UserAuthenticated(UserAuthenticated),
     PublicKey(PublicKey),
+    UserSession(UserSession),
     /* AccountSetup() */
     CredentialsRejected,
     InternalServerError,
@@ -82,7 +83,7 @@ impl FullResponseData {
 impl IntoResponse for FullResponseData {
     fn into_response(self) -> axum::response::Response {
         let status_code = match self.response_data {
-            ResponseData::InitLoginFlow(_) | ResponseData::UserAuthenticated(_) | ResponseData::PublicKey(_) => StatusCode::OK,
+            ResponseData::InitLoginFlow(_) | ResponseData::UserAuthenticated(_) | ResponseData::PublicKey(_) | ResponseData::UserSession(_) => StatusCode::OK,
             ResponseData::CredentialsRejected | ResponseData::Unauthorised => StatusCode::UNAUTHORIZED,
             ResponseData::InternalServerError => {
                 return (
