@@ -1,17 +1,17 @@
 use crate::{
     cryptography::generate_token,
     error::{
-        AccountSetupError, AuthenticationError, EncryptionError, Error, InternalError, LoginError,
-        OpenSSLError, StartupError, TokenError,
+        AccountSetupError, AuthenticationError, EncryptionError, Error, FromUtf8Error,
+        InternalError, LoginError, OpenSSLError, StartupError, Utf8Error,
     },
     filter_headers_into_btreeset,
+    flows::user_setup::UserInvite,
     r#trait::HashDebug,
     token::Token,
     user::User,
-    user_login::LoginFlow,
 };
 use axum::http::{HeaderMap, HeaderValue};
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use google_authenticator::GoogleAuthenticator;
 use openssl::{
@@ -21,7 +21,8 @@ use openssl::{
 use parking_lot::RwLock;
 use rand::Rng;
 use regex::RegexSet;
-use std::{collections::HashMap, sync::Arc};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{collections::HashMap, str::from_utf8, sync::Arc};
 use uuid::Uuid;
 
 pub struct Regexes {
@@ -177,6 +178,33 @@ impl EncryptionKeys {
         &self.public_key
     }
 
+    pub fn get_public_encryption_key_string(&self) -> Result<String, Error> {
+        let public_pem_bytes = match self.public_key.public_key_to_pem() {
+            Ok(t) => t,
+            Err(err) => {
+                println!("{}", err);
+                return Err(
+                    InternalError::Encryption(EncryptionError::PublicToPEMConversion(
+                        OpenSSLError(err),
+                    ))
+                    .into(),
+                );
+            }
+        };
+        match from_utf8(&public_pem_bytes) {
+            Ok(public_pem_str) => Ok(public_pem_str.to_string()),
+            Err(err) => {
+                println!("{}", err);
+                Err(
+                    InternalError::Encryption(EncryptionError::PublicPEMBytesToString(Utf8Error(
+                        err,
+                    )))
+                    .into(),
+                )
+            }
+        }
+    }
+
     pub fn get_private_decryption_key(&self) -> &PKey<Private> {
         &self.private_key
     }
@@ -190,8 +218,45 @@ impl EncryptionKeys {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub enum FlowType {
+    Login,
+    Setup,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Flow<T> {
+    header_key: String,
+    r#type: FlowType,
+    data: T,
+}
+
+impl<T> Flow<T> {
+    pub fn new(header_key: String, r#type: FlowType, data: T) -> Self {
+        Self {
+            header_key,
+            r#type,
+            data,
+        }
+    }
+    pub fn get_header_key(&self) -> &String {
+        &self.header_key
+    }
+    pub fn get_type(&self) -> &FlowType {
+        &self.r#type
+    }
+    pub fn get_data(&self) -> &T {
+        &self.data
+    }
+    pub fn collapse(self) -> (String, FlowType, T) {
+        (self.header_key, self.r#type, self.data)
+    }
+    pub fn collapse_data(self) -> T {
+        self.data
+    }
+}
+
 pub struct AuthManager {
-    auth_lifetime: Duration,
     users: Arc<RwLock<HashMap<Uuid, User>>>,
     email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>>,
 
@@ -221,10 +286,8 @@ impl AuthManager {
 
         let encryption_keys = EncryptionKeys::new()?;
         Ok(Self {
-            auth_lifetime: Duration::minutes(5),
             users,
             email_to_id_registry,
-
             regexes: Regexes::default(),
             config: Config::new(cookie_name, allowed_origin),
             encryption_keys,
@@ -233,39 +296,61 @@ impl AuthManager {
 }
 
 impl AuthManager {
-    pub fn setup_login_flow(&self, headers: &HeaderMap) -> Result<LoginFlow, Error> {
+    pub fn setup_flow<T: Serialize + DeserializeOwned>(
+        &self,
+        headers: &HeaderMap,
+        r#type: FlowType,
+        lifetime: Duration,
+        data: T,
+    ) -> Result<(String, DateTime<Utc>), Error> {
         let headers =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
 
         let key: String = headers.hash_debug();
-        let expiry = Utc::now() + self.auth_lifetime;
-        let login_flow: LoginFlow = LoginFlow::new(key, expiry.to_owned());
-        Ok(LoginFlow::new(
-            Token::create_signed_and_encrypted(
-                login_flow,
-                expiry,
-                self.encryption_keys.get_private_signing_key(),
-                self.encryption_keys.get_symmetric_key(),
-                self.encryption_keys.get_iv(),
-            )?,
+        let expiry: DateTime<Utc> = Utc::now() + lifetime;
+        let login_flow: Flow<T> = Flow::new(key, r#type, data);
+
+        let token: String = Token::create_signed_and_encrypted(
+            login_flow,
             expiry,
-        ))
+            self.encryption_keys.get_private_signing_key(),
+            self.encryption_keys.get_symmetric_key(),
+            self.encryption_keys.get_iv(),
+        )?;
+        Ok((token, expiry))
     }
-    pub fn verify_login_flow(&self, token: String, headers: &HeaderMap) -> Result<(), Error> {
-        let login_flow = Token::verify_and_decrypt::<LoginFlow>(
+
+    pub fn validate_invite_token(
+        &self,
+        token: String,
+    ) -> Result<(UserInvite, DateTime<Utc>), Error> {
+        Token::verify_and_decrypt::<UserInvite>(
+            &token,
+            self.encryption_keys.get_public_signing_key(),
+            self.encryption_keys.get_symmetric_key(),
+            self.encryption_keys.get_iv(),
+        )
+    }
+
+    pub fn verify_flow<T: Serialize + DeserializeOwned>(
+        &self,
+        token: String,
+        headers: &HeaderMap,
+    ) -> Result<T, Error> {
+        let (flow, expiry): (Flow<T>, DateTime<Utc>) = Token::verify_and_decrypt::<Flow<T>>(
             &token,
             self.encryption_keys.get_public_signing_key(),
             self.encryption_keys.get_symmetric_key(),
             self.encryption_keys.get_iv(),
         )?;
-        let headers =
+        let headers: std::collections::BTreeMap<String, HeaderValue> =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
 
         let key: String = headers.hash_debug();
-        if &key != login_flow.get_key() {
-            return Err(InternalError::Login(LoginError::KeysDontMatch).into());
+        if &key != flow.get_header_key() {
+            return Err(InternalError::Login(LoginError::HeaderKeysDontMatch).into());
         }
-        Ok(())
+        Ok(flow.data)
     }
 
     pub fn generate_user_uid(&self) -> Uuid {

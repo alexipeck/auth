@@ -1,15 +1,12 @@
 use auth::auth_manager::AuthManager;
-use auth::cryptography::JsonEncryptedDataWrapper;
+use auth::base::debug_route;
+use auth::routes::login::{init_login_flow_route, login_with_credentials_route};
+use auth::routes::setup::validate_invite_token_route;
 use auth::serde::datetime_utc;
-use auth::user_login::{init_login_flow, verify_login_flow, LoginCredentials, login_with_credentials};
-use axum::extract::ConnectInfo;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE};
-use axum::http::{HeaderMap, Method, StatusCode};
+use axum::http::Method;
 use axum::routing::{get, post};
-use axum::{extract::Extension, response::IntoResponse, Router};
-use axum_extra::headers::authorization::Bearer;
-use axum_extra::headers::{Authorization, Cookie};
-use axum_extra::TypedHeader;
+use axum::{extract::Extension, Router};
 use chrono::{DateTime, Utc};
 use directories::BaseDirs;
 use email_address::EmailAddress;
@@ -49,66 +46,6 @@ struct AccountSetup {
     two_fa_code: [u8; 6],
 }
 
-/* #[derive(Debug, Deserialize)]
-enum Payload {
-    Credentials(LoginCredentials),
-} */
-
-/* async fn credentials(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Extension(auth_manager): Extension<Arc<AuthManager>>,
-    headers: HeaderMap,
-    axum::response::Json(encrypted_credentials): axum::response::Json<JsonEncryptedDataWrapper>,
-) -> impl IntoResponse {
-    println!("{:?}", addr);
-    //println!("{:?}", headers);
-    /* println!("{:?}", cookie);
-    println!("{:?}", authorisation); */
-    /* match auth_manager.verify_login_flow(&login_credentials, &headers) {
-        Ok(valid) => {
-            if !valid {
-                return StatusCode::UNAUTHORIZED.into_response();
-            }
-        }
-        Err(err) => {
-            println!("{}", err);
-            return StatusCode::UNAUTHORIZED.into_response();
-        }
-    }; */
-
-    panic!();
-} */
-
-async fn verify_auth(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    TypedHeader(cookie): TypedHeader<Cookie>,
-    TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
-    /* Extension(security_manager): Extension<Arc<SecurityManager>>, */
-    Extension(auth_manager): Extension<Arc<AuthManager>>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    println!("{:?}", addr);
-    println!("{:?}", headers);
-    println!("{:?}", cookie);
-    println!("{:?}", authorisation);
-    StatusCode::OK.into_response()
-}
-
-async fn invite_user(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    TypedHeader(cookie): TypedHeader<Cookie>,
-    TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
-    /* Extension(security_manager): Extension<Arc<SecurityManager>>, */
-    Extension(auth_manager): Extension<Arc<AuthManager>>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    println!("{:?}", addr);
-    println!("{:?}", headers);
-    println!("{:?}", cookie);
-    println!("{:?}", authorisation);
-    StatusCode::OK.into_response()
-}
-
 pub async fn run_rest_server(
     auth_manager: Arc<AuthManager>,
     security_manager: Arc<DummySecurityManager>,
@@ -125,10 +62,11 @@ pub async fn run_rest_server(
         .allow_credentials(true);
 
     let app = Router::new()
-        .route("/login/init-login-flow", get(init_login_flow))
-        .route("/verify-auth", post(verify_auth))
-        .route("/verify-login-flow", post(verify_login_flow))
-        .route("/login/credentials", post(login_with_credentials))
+        .route("/login/init-login-flow", get(init_login_flow_route))
+        .route("/debug", post(debug_route))
+        /* .route("/verify-login-flow", post(verify_flow)) */
+        .route("/login/credentials", post(login_with_credentials_route))
+        .route("/setup/init-setup-flow", post(validate_invite_token_route))
         /* .route("/logout", post(logout)) */
         /* .layer(TraceLayer::new_for_http()) */
         .layer(cors)
@@ -151,7 +89,6 @@ pub async fn run_rest_server(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    //println!("{:?}", generate_random_base32_string(64));
     let cookie_name: String = "uamtoken".to_string(); //This won't exist and will be passed down from AuthManager
     let allowed_origin: String = "http://dev.clouduam.com:81".to_owned(); //https://clouduam.com
 

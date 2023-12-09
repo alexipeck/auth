@@ -1,4 +1,8 @@
-use crate::{serde::datetime_utc, user_login::LoginFlow, user_session::UserSession};
+use crate::{
+    flows::{user_login::LoginFlow, user_setup::UserSetupFlow},
+    serde::datetime_utc,
+    user_session::UserSession,
+};
 use axum::{
     body::Body,
     http::{header::CONTENT_SECURITY_POLICY, response::Builder, StatusCode},
@@ -7,7 +11,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use cookie::{
-    time::{self, Duration, OffsetDateTime},
+    time::{Duration, OffsetDateTime},
     CookieBuilder, Expiration, SameSite,
 };
 use serde::Serialize;
@@ -38,16 +42,11 @@ pub struct UserAuthenticated {
 }
 
 #[derive(Debug, Serialize)]
-pub struct PublicKey {
-    pub public_key: String,
-}
-
-#[derive(Debug, Serialize)]
 pub enum ResponseData {
     InitLoginFlow(LoginFlow),
     UserAuthenticated(UserAuthenticated),
-    PublicKey(PublicKey),
     UserSession(UserSession),
+    InitSetupFlow(UserSetupFlow),
     /* AccountSetup() */
     CredentialsRejected,
     InternalServerError,
@@ -83,8 +82,13 @@ impl FullResponseData {
 impl IntoResponse for FullResponseData {
     fn into_response(self) -> axum::response::Response {
         let status_code = match self.response_data {
-            ResponseData::InitLoginFlow(_) | ResponseData::UserAuthenticated(_) | ResponseData::PublicKey(_) | ResponseData::UserSession(_) => StatusCode::OK,
-            ResponseData::CredentialsRejected | ResponseData::Unauthorised => StatusCode::UNAUTHORIZED,
+            ResponseData::InitLoginFlow(_)
+            | ResponseData::UserAuthenticated(_)
+            | ResponseData::UserSession(_)
+            | ResponseData::InitSetupFlow(_) => StatusCode::OK,
+            ResponseData::CredentialsRejected | ResponseData::Unauthorised => {
+                StatusCode::UNAUTHORIZED
+            }
             ResponseData::InternalServerError => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,

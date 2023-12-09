@@ -1,7 +1,4 @@
-use email_address::EmailAddress;
 use serde::Deserialize;
-
-use crate::user_login::LoginCredentials;
 
 #[derive(Debug, Deserialize)]
 pub struct TwoTokens {

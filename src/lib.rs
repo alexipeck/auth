@@ -4,23 +4,23 @@ use regex::RegexSet;
 use std::collections::BTreeMap;
 
 pub mod auth_manager;
+#[path = "./routes/base.rs"]
+pub mod base;
 #[path = "./transmission/bidirectional.rs"]
 pub mod bidirectional;
 pub mod credentials;
 pub mod cryptography;
 pub mod error;
+pub mod flows;
 #[path = "./transmission/request.rs"]
 pub mod request;
 #[path = "./transmission/response.rs"]
 pub mod response;
+pub mod routes;
 pub mod serde;
 pub mod token;
 pub mod r#trait;
 pub mod user;
-#[path = "./flows/user_login.rs"]
-pub mod user_login;
-#[path = "./flows/user_setup.rs"]
-pub mod user_setup;
 pub mod user_session;
 
 ///hashes with blake3

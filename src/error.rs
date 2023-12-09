@@ -50,6 +50,7 @@ impl_error_wrapper!(SerdeError, serde_json::error::Error);
 impl_error_wrapper!(OpenSSLError, openssl::error::ErrorStack);
 impl_error_wrapper!(Base64DecodeError, base64::DecodeError);
 impl_error_wrapper!(FromUtf8Error, std::string::FromUtf8Error);
+impl_error_wrapper!(Utf8Error, core::str::Utf8Error);
 
 #[derive(Error, Debug)]
 pub enum TokenError {
@@ -98,7 +99,7 @@ pub enum TokenError {
 #[derive(Error, Debug)]
 pub enum LoginError {
     #[error("KeysDontMatch")]
-    KeysDontMatch,
+    HeaderKeysDontMatch,
 }
 
 #[derive(Error, Debug)]
@@ -143,6 +144,10 @@ pub enum EncryptionError {
     RSAPrivateConversion(OpenSSLError),
     #[error("DataDecryption({0})")]
     DataDecryption(OpenSSLError),
+    #[error("PublicToPEMConversion({0})")]
+    PublicToPEMConversion(OpenSSLError),
+    #[error("PublicPEMBytesToString({0})")]
+    PublicPEMBytesToString(Utf8Error),
 }
 
 #[derive(Error, Debug)]
