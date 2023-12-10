@@ -47,7 +47,6 @@ pub enum ResponseData {
     UserAuthenticated(UserAuthenticated),
     UserSession(UserSession),
     InitSetupFlow(UserSetupFlow),
-    /* AccountSetup() */
     SetupComplete,
     CredentialsRejected,
     InternalServerError,

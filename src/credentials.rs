@@ -18,9 +18,3 @@ pub struct TwoTokensPlus2FA {
     header_token: String,
     two_fa_code: [u8; 6],
 }
-
-/* pub enum AuthForm {
-    LoginCredentials(String),
-    TwoTokens(TwoTokens),
-    TwoTokensPlus2FA(TwoTokensPlus2FA),
-} */

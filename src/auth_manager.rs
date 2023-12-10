@@ -469,9 +469,6 @@ impl AuthManager {
             ),
         }
     }
-    /* fn validate_login_credentials(&self, credentials: LoginCredentials) -> Result<()/* Option<User> */, Error> {
-
-    } */
 
     /* fn validate_auth_level_1(&self, ) -> Result<()/* Option<User> */, Error> {
 

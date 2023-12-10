@@ -26,9 +26,6 @@ fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result
 
 pub async fn init_login_flow_route(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    /* TypedHeader(cookie): TypedHeader<Cookie>, */
-    /* TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>, */
-    /* Extension(security_manager): Extension<Arc<SecurityManager>>, */
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {

@@ -13,8 +13,6 @@ pub async fn debug_route(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     TypedHeader(cookie): TypedHeader<Cookie>,
     TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
-    /* Extension(security_manager): Extension<Arc<SecurityManager>>, */
-    /* Extension(auth_manager): Extension<Arc<AuthManager>>, */
     headers: HeaderMap,
 ) -> impl IntoResponse {
     println!("{:?}", addr);

@@ -66,7 +66,6 @@ pub async fn run_rest_server(
     let app = Router::new()
         .route("/login/init-login-flow", get(init_login_flow_route))
         .route("/debug", post(debug_route))
-        /* .route("/verify-login-flow", post(verify_flow)) */
         .route("/login/credentials", post(login_with_credentials_route))
         .route("/setup/init-setup-flow", post(validate_invite_token_route))
         .route("/setup/credentials", post(setup_user_account_route))
