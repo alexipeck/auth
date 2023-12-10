@@ -73,7 +73,7 @@ impl Token {
     pub fn create_signed<T: Serialize + DeserializeOwned>(
         data: T,
         expiry: DateTime<Utc>,
-        private_key: &PKey<Private>,
+        private_signing_key: &PKey<Private>,
     ) -> Result<String, Error> {
         let serialised_data_base64: String = {
             let data: TokenWrapper<T> = TokenWrapper {
@@ -106,7 +106,7 @@ impl Token {
             URL_SAFE_NO_PAD.encode(&header_str)
         };
         let signature_base64 = {
-            let mut signer = match Signer::new(MessageDigest::sha256(), private_key) {
+            let mut signer = match Signer::new(MessageDigest::sha256(), private_signing_key) {
                 Ok(signer) => signer,
                 Err(err) => {
                     warn!("{}", err);
@@ -143,7 +143,7 @@ impl Token {
     pub fn create_signed_and_encrypted<T: Serialize + DeserializeOwned>(
         data: T,
         expiry: DateTime<Utc>,
-        private_key: &PKey<Private>,
+        private_signing_key: &PKey<Private>,
         symmetric_key: &[u8],
         iv: &[u8],
     ) -> Result<String, Error> {
@@ -192,7 +192,7 @@ impl Token {
             URL_SAFE_NO_PAD.encode(&header_str)
         };
         let signature_base64: String = {
-            let mut signer = match Signer::new(MessageDigest::sha256(), private_key) {
+            let mut signer = match Signer::new(MessageDigest::sha256(), private_signing_key) {
                 Ok(signer) => signer,
                 Err(err) => {
                     warn!("{}", err);
@@ -229,7 +229,7 @@ impl Token {
 
     pub fn verify_and_decrypt<T: Serialize + DeserializeOwned>(
         token: &String,
-        public_key: &PKey<Public>,
+        public_signing_key: &PKey<Public>,
         symmetric_key: &[u8],
         iv: &[u8],
     ) -> Result<(T, DateTime<Utc>), Error> {
@@ -278,7 +278,7 @@ impl Token {
             };
 
             let mut verifier: Verifier<'_> =
-                match Verifier::new(MessageDigest::sha256(), public_key) {
+                match Verifier::new(MessageDigest::sha256(), public_signing_key) {
                     Ok(verifier) => verifier,
                     Err(err) => {
                         return Err(
@@ -341,6 +341,8 @@ impl Token {
                 )
             }
         };
+
+        //println!("{}", decrypted_data_str);
 
         let decrypted_data_struct: TokenWrapper<T> =
             match serde_json::from_str::<TokenWrapper<T>>(&decrypted_data_str) {

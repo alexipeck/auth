@@ -1,8 +1,8 @@
 use crate::{
     cryptography::generate_token,
     error::{
-        AccountSetupError, AuthenticationError, EncryptionError, Error, FromUtf8Error,
-        InternalError, LoginError, OpenSSLError, StartupError, Utf8Error,
+        AccountSetupError, AuthenticationError, EncryptionError, Error, InternalError, LoginError,
+        OpenSSLError, StartupError, Utf8Error,
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
@@ -273,18 +273,12 @@ impl AuthManager {
                 return Err(InternalError::Startup(StartupError::InvalidOrigin(err.into())).into())
             }
         };
-        let email_to_id_registry = Arc::new(RwLock::new(HashMap::new()));
+        let email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>> =
+            Arc::new(RwLock::new(HashMap::new()));
         let users: Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, HashMap<_, _>>> =
             Arc::new(RwLock::new(HashMap::new()));
-        {
-            let user_id = Uuid::parse_str("cad8de7f-5507-48ef-9d4e-68939b4ade81").unwrap();
-            let email = EmailAddress::new_unchecked("alexinicolaspeck@gmail.com");
-            let debug_user: User = User::new(user_id, "Alexi Peck".to_string(), email.to_owned(), "$argon2id$v=19$m=2097152,t=1,p=1$RF5ndW4oU15VTHpnNFpRNHJmW30vRmoqU3lTPyxhRHE$Xl3u7HaK8/TMaukl0xTBwATjGkfHBS1GH8LHVILgkw".to_string(), "HX4IXEYSPJMHEG36YNEOQDPTKAUDF6YMFBDRCO3Z5LWXQGVO25KOTVWB2UOYWJFH".to_string());
-            users.write().insert(*debug_user.get_id(), debug_user);
-            email_to_id_registry.write().insert(email, user_id);
-        }
 
-        let encryption_keys = EncryptionKeys::new()?;
+        let encryption_keys: EncryptionKeys = EncryptionKeys::new()?;
         Ok(Self {
             users,
             email_to_id_registry,
@@ -334,7 +328,7 @@ impl AuthManager {
 
     pub fn verify_flow<T: Serialize + DeserializeOwned>(
         &self,
-        token: String,
+        token: &String,
         headers: &HeaderMap,
     ) -> Result<T, Error> {
         let (flow, expiry): (Flow<T>, DateTime<Utc>) = Token::verify_and_decrypt::<Flow<T>>(
@@ -353,6 +347,10 @@ impl AuthManager {
         Ok(flow.data)
     }
 
+    pub fn get_user_id_from_email(&self, email: &EmailAddress) -> Option<Uuid> {
+        self.email_to_id_registry.read().get(email).cloned()
+    }
+
     pub fn generate_user_uid(&self) -> Uuid {
         loop {
             let uid = Uuid::new_v4();
@@ -363,36 +361,48 @@ impl AuthManager {
         }
     }
 
-    pub fn add_user(
+    pub fn invite_user(&self, email: EmailAddress) -> Result<String, Error> {
+        let user_id: Uuid = self.generate_user_uid();
+        let user: User = User::new(
+            user_id,
+            String::new(),
+            email.to_owned(),
+            String::new(),
+            String::new(),
+        );
+        let invite_token: String = Token::create_signed_and_encrypted(
+            UserInvite::new(email.to_owned(), user_id),
+            Utc::now() + Duration::minutes(600),
+            self.encryption_keys.get_private_signing_key(),
+            self.encryption_keys.get_symmetric_key(),
+            self.encryption_keys.get_iv(),
+        )?;
+        let _ = self.users.write().insert(user_id, user);
+        self.email_to_id_registry.write().insert(email, user_id);
+        Ok(invite_token)
+    }
+
+    pub fn setup_user(
         &self,
-        email: EmailAddress,
+        email: &EmailAddress,
         password: String,
         display_name: String,
         two_fa_client_secret: String,
     ) -> Result<(), Error> {
-        let salt = generate_token(32);
-        let hashed_and_salted_password = match argon2::hash_encoded(
-            password.as_bytes(),
-            salt.as_bytes(),
-            &argon2::Config::default(),
-        ) {
-            Ok(hashed_and_salted_password) => hashed_and_salted_password,
-            Err(err) => {
-                return Err(InternalError::AccountSetup(AccountSetupError::Argon2(err)).into())
+        let user_id: Uuid = match self.get_user_id_from_email(email) {
+            Some(user_id) => user_id,
+            None => {
+                return Err(InternalError::AccountSetup(
+                    AccountSetupError::CouldntGetUserIDFromEmail,
+                )
+                .into())
             }
         };
-        let user: User = User::new(
-            self.generate_user_uid(),
-            display_name,
-            email.to_owned(),
-            hashed_and_salted_password,
-            two_fa_client_secret,
-        );
-        self.email_to_id_registry
-            .write()
-            .insert(email, user.get_id().to_owned());
-        self.users.write().insert(user.get_id().to_owned(), user);
-        Ok(())
+        return if let Some(user) = self.users.write().get_mut(&user_id) {
+            user.setup_user(password, display_name, two_fa_client_secret)
+        } else {
+            Err(InternalError::AccountSetup(AccountSetupError::UserNotFound(user_id)).into())
+        };
     }
 
     pub fn validate_user_credentials(
@@ -404,6 +414,12 @@ impl AuthManager {
         match self.email_to_id_registry.read().get(email) {
             Some(user_id) => match self.users.read().get(user_id) {
                 Some(user) => {
+                    if user.incomplete() {
+                        return Err(InternalError::Authentication(
+                            AuthenticationError::AccountSetupIncomplete,
+                        )
+                        .into());
+                    }
                     match argon2::verify_encoded(
                         user.get_hashed_and_salted_password(),
                         password.as_bytes(),

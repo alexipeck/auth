@@ -4,6 +4,7 @@ use axum::http::header::InvalidHeaderValue;
 use email_address::EmailAddress;
 use google_authenticator::GAError;
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::impl_error_wrapper;
 
@@ -29,6 +30,8 @@ pub enum AuthenticationError {
     UserUIDNotRegisteredToEmail(EmailAddress),
     #[error("EmailNotRegistered({0})")]
     EmailNotRegistered(EmailAddress),
+    #[error("AccountSetupIncomplete")]
+    AccountSetupIncomplete,
     /* #[error("")]
     ErrorGetting2FACodeFromSecret,
     #[error("Argon2ValidationError({0})")]
@@ -122,6 +125,14 @@ pub enum AccountSetupError {
     InvalidToken,
     #[error("Argon2({0})")]
     Argon2(#[from] argon2::Error),
+    #[error("GoogleAuthenticator({0})")]
+    GoogleAuthenticator(#[from] GAError),
+    #[error("AccountSetupNotIncomplete")]
+    AccountSetupNotIncomplete,
+    #[error("UserNotFound({0})")]
+    UserNotFound(Uuid),
+    #[error("CouldntGetUserIDFromEmail")]
+    CouldntGetUserIDFromEmail,
 }
 
 #[derive(Error, Debug)]

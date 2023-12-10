@@ -48,6 +48,7 @@ pub enum ResponseData {
     UserSession(UserSession),
     InitSetupFlow(UserSetupFlow),
     /* AccountSetup() */
+    SetupComplete,
     CredentialsRejected,
     InternalServerError,
     Unauthorised,
@@ -85,7 +86,8 @@ impl IntoResponse for FullResponseData {
             ResponseData::InitLoginFlow(_)
             | ResponseData::UserAuthenticated(_)
             | ResponseData::UserSession(_)
-            | ResponseData::InitSetupFlow(_) => StatusCode::OK,
+            | ResponseData::InitSetupFlow(_)
+            | ResponseData::SetupComplete => StatusCode::OK,
             ResponseData::CredentialsRejected | ResponseData::Unauthorised => {
                 StatusCode::UNAUTHORIZED
             }

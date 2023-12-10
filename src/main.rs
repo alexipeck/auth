@@ -1,13 +1,15 @@
 use auth::auth_manager::AuthManager;
 use auth::base::debug_route;
+use auth::flows::user_setup::UserInvite;
 use auth::routes::login::{init_login_flow_route, login_with_credentials_route};
-use auth::routes::setup::validate_invite_token_route;
+use auth::routes::setup::{setup_user_account_route, validate_invite_token_route};
 use auth::serde::datetime_utc;
+use auth::token::Token;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE};
 use axum::http::Method;
 use axum::routing::{get, post};
 use axum::{extract::Extension, Router};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use directories::BaseDirs;
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
@@ -67,6 +69,7 @@ pub async fn run_rest_server(
         /* .route("/verify-login-flow", post(verify_flow)) */
         .route("/login/credentials", post(login_with_credentials_route))
         .route("/setup/init-setup-flow", post(validate_invite_token_route))
+        .route("/setup/credentials", post(setup_user_account_route))
         /* .route("/logout", post(logout)) */
         /* .layer(TraceLayer::new_for_http()) */
         .layer(cors)
@@ -123,8 +126,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             panic!("{}", err);
         }
     };
-    if let Err(err) = auth_manager.add_user(EmailAddress::new_unchecked("alexinicolaspeck@gmail.com"), "vK9AzpihNTCvH%YTmfx8uaMDDZ3^L%79DJDXdZCpKXYgrjN4p3Ff$qf3v4kRN&AN@Lve4z#Bf&pv^Ra@f@kKKEpW^WCra&PK^Gq@dcg@gRwVAUUfvE*@ZwpU^TVHKw35".to_string(), "Alexi Peck".to_string(), "HX4IXEYSPJMHEG36YNEOQDPTKAUDF6YMFBDRCO3Z5LWXQGVO25KOTVWB2UOYWJFH".to_string()) {
-        panic!("{}", err);
+    {
+        //debug
+        if let Ok(invite_link) =
+            auth_manager.invite_user(EmailAddress::new_unchecked("alexinicolaspeck@gmail.com"))
+        {
+            println!("{}", invite_link);
+        }
+        //auth_manager.setup_user(&EmailAddress::new_unchecked("alexinicolaspeck@gmail.com"), "vK9AzpihNTCvH%YTmfx8uaMDDZ3^L%79DJDXdZCpKXYgrjN4p3Ff$qf3v4kRN&AN@Lve4z#Bf&pv^Ra@f@kKKEpW^WCra&PK^Gq@dcg@gRwVAUUfvE*@ZwpU^TVHKw35".to_string(), "Alexi Peck".to_string(), "HX4IXEYSPJMHEG36YNEOQDPTKAUDF6YMFBDRCO3Z5LWXQGVO25KOTVWB2UOYWJFH".to_string()).unwrap();
     }
 
     let auth_manager = Arc::new(auth_manager);

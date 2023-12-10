@@ -109,7 +109,7 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
             )
         }
     };
-
+    //println!("{}", decrypted_data_str);
     let decrypted_data_struct: T = match serde_json::from_str::<T>(&decrypted_data_str) {
         Ok(decrypted_data_struct) => decrypted_data_struct,
         Err(err) => {

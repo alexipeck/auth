@@ -3,7 +3,7 @@ use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::serde::datetime_utc;
+use crate::{cryptography::generate_random_base32_string, serde::datetime_utc};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserInvite {
@@ -11,12 +11,35 @@ pub struct UserInvite {
     user_id: Uuid,
 }
 
-impl UserInvite {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserInviteInstance {
+    email: EmailAddress,
+    user_id: Uuid,
+    two_fa_client_secret: String,
+}
+
+impl UserInviteInstance {
+    pub fn from_user_invite(user_invite: UserInvite) -> Self {
+        Self {
+            email: user_invite.email,
+            user_id: user_invite.user_id,
+            two_fa_client_secret: generate_random_base32_string(64),
+        }
+    }
     pub fn get_email(&self) -> &EmailAddress {
         &self.email
     }
     pub fn get_user_id(&self) -> &Uuid {
         &self.user_id
+    }
+    pub fn get_two_fa_client_secret(&self) -> &String {
+        &self.two_fa_client_secret
+    }
+}
+
+impl UserInvite {
+    pub fn new(email: EmailAddress, user_id: Uuid) -> Self {
+        Self { email, user_id }
     }
 }
 
@@ -26,9 +49,16 @@ pub struct InviteToken {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct SetupCredentials {
+    pub display_name: String,
+    pub password: String,
+    pub two_fa_code: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct UserSetup {
-    key: String,
-    encrypted_credentials: String,
+    pub key: String,
+    pub encrypted_credentials: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -68,6 +98,12 @@ impl UserSetupFlow {
             two_fa_client_secret,
             public_encryption_key,
         }
+    }
+    pub fn get_two_fa_client_secret(&self) -> &String {
+        &self.two_fa_client_secret
+    }
+    pub fn get_email(&self) -> &EmailAddress {
+        &self.email
     }
 }
 
