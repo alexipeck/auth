@@ -18,6 +18,7 @@ pub mod request;
 pub mod response;
 pub mod routes;
 pub mod serde;
+pub mod smtp_manager;
 pub mod token;
 pub mod r#trait;
 pub mod user;

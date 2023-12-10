@@ -54,6 +54,9 @@ impl_error_wrapper!(OpenSSLError, openssl::error::ErrorStack);
 impl_error_wrapper!(Base64DecodeError, base64::DecodeError);
 impl_error_wrapper!(FromUtf8Error, std::string::FromUtf8Error);
 impl_error_wrapper!(Utf8Error, core::str::Utf8Error);
+impl_error_wrapper!(SmtpAddressError, lettre::address::AddressError);
+impl_error_wrapper!(SmtpTransportError, lettre::transport::smtp::Error);
+impl_error_wrapper!(LettreError, lettre::error::Error);
 
 #[derive(Error, Debug)]
 pub enum TokenError {
@@ -162,6 +165,20 @@ pub enum EncryptionError {
 }
 
 #[derive(Error, Debug)]
+pub enum SmtpError {
+    #[error("ServerAddressParse({0})")]
+    ServerAddressParse(SmtpAddressError),
+    #[error("SmtpTransportRelayBuild({0})")]
+    SmtpTransportRelayBuild(SmtpTransportError),
+    #[error("MessageBuilder({0})")]
+    MessageBuilder(LettreError),
+    #[error("MessageSend({0})")]
+    MessageSend(SmtpTransportError),
+    #[error("RecipientAddressParse({0})")]
+    RecipientAddressParse(SmtpAddressError),
+}
+
+#[derive(Error, Debug)]
 pub enum InternalError {
     #[error("AuthFlow({0})")]
     AuthFlow(#[from] AuthFlowError),
@@ -179,6 +196,8 @@ pub enum InternalError {
     ClientPayload(#[from] ClientPayloadError),
     #[error("Login({0})")]
     Login(#[from] LoginError),
+    #[error("Smtp({0})")]
+    Smtp(SmtpError),
 }
 
 #[derive(Error, Debug)]

@@ -1,5 +1,5 @@
 use crate::{
-    cryptography::generate_token,
+    cryptography::{generate_token, EncryptionKeys},
     error::{
         AccountSetupError, AuthenticationError, EncryptionError, Error, InternalError, LoginError,
         OpenSSLError, StartupError, Utf8Error,
@@ -7,6 +7,7 @@ use crate::{
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
     r#trait::HashDebug,
+    smtp_manager::SmtpManager,
     token::Token,
     user::User,
 };
@@ -95,129 +96,6 @@ impl Config {
     }
 }
 
-pub struct EncryptionKeys {
-    signing_private_key: PKey<Private>,
-    signing_public_key: PKey<Public>,
-    private_key: PKey<Private>,
-    public_key: PKey<Public>,
-    symmetric_key: [u8; 32], // 256-bit key for AES-256
-    iv: [u8; 16],            // 128-bit IV for AES
-}
-
-impl EncryptionKeys {
-    pub fn new() -> Result<Self, Error> {
-        let (public_key, private_key) = Self::generate_asymmetric_keys()?;
-        let (signing_public_key, signing_private_key) = Self::generate_asymmetric_keys()?;
-        Ok(Self {
-            signing_private_key,
-            signing_public_key,
-            private_key,
-            public_key,
-            symmetric_key: rand::thread_rng().gen(),
-            iv: rand::thread_rng().gen(),
-        })
-    }
-
-    pub fn generate_asymmetric_keys() -> Result<(PKey<Public>, PKey<Private>), Error> {
-        let rsa: Rsa<Private> = match Rsa::generate(2048) {
-            Ok(rsa) => rsa,
-            Err(err) => {
-                return Err(
-                    InternalError::Encryption(EncryptionError::GeneratingRSABase(OpenSSLError(
-                        err,
-                    )))
-                    .into(),
-                )
-            }
-        };
-        let private_key = match PKey::from_rsa(rsa.clone()) {
-            Ok(private_key) => private_key,
-            Err(err) => {
-                return Err(
-                    InternalError::Encryption(EncryptionError::GeneratingRSAPrivate(OpenSSLError(
-                        err,
-                    )))
-                    .into(),
-                )
-            }
-        };
-        let public_key_pem: Vec<u8> = match rsa.public_key_to_pem() {
-            Ok(public_key_pem) => public_key_pem,
-            Err(err) => {
-                return Err(
-                    InternalError::Encryption(EncryptionError::GeneratingRSAPublicPEM(
-                        OpenSSLError(err),
-                    ))
-                    .into(),
-                )
-            }
-        };
-        let public_key = match PKey::public_key_from_pem(&public_key_pem) {
-            Ok(public_key) => public_key,
-            Err(err) => {
-                return Err(
-                    InternalError::Encryption(EncryptionError::GeneratingRSAPublic(OpenSSLError(
-                        err,
-                    )))
-                    .into(),
-                )
-            }
-        };
-        Ok((public_key, private_key))
-    }
-
-    pub fn get_private_signing_key(&self) -> &PKey<Private> {
-        &self.signing_private_key
-    }
-
-    pub fn get_public_signing_key(&self) -> &PKey<Public> {
-        &self.signing_public_key
-    }
-
-    pub fn get_public_encryption_key(&self) -> &PKey<Public> {
-        &self.public_key
-    }
-
-    pub fn get_public_encryption_key_string(&self) -> Result<String, Error> {
-        let public_pem_bytes = match self.public_key.public_key_to_pem() {
-            Ok(t) => t,
-            Err(err) => {
-                println!("{}", err);
-                return Err(
-                    InternalError::Encryption(EncryptionError::PublicToPEMConversion(
-                        OpenSSLError(err),
-                    ))
-                    .into(),
-                );
-            }
-        };
-        match from_utf8(&public_pem_bytes) {
-            Ok(public_pem_str) => Ok(public_pem_str.to_string()),
-            Err(err) => {
-                println!("{}", err);
-                Err(
-                    InternalError::Encryption(EncryptionError::PublicPEMBytesToString(Utf8Error(
-                        err,
-                    )))
-                    .into(),
-                )
-            }
-        }
-    }
-
-    pub fn get_private_decryption_key(&self) -> &PKey<Private> {
-        &self.private_key
-    }
-
-    pub fn get_symmetric_key(&self) -> &[u8; 32] {
-        &self.symmetric_key
-    }
-
-    pub fn get_iv(&self) -> &[u8; 16] {
-        &self.iv
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 pub enum FlowType {
     Login,
@@ -263,10 +141,18 @@ pub struct AuthManager {
     regexes: Regexes,
     pub config: Config,
     pub encryption_keys: EncryptionKeys,
+    pub smtp_manager: SmtpManager,
 }
 
 impl AuthManager {
-    pub fn new(cookie_name: String, allowed_origin: String) -> Result<Self, Error> {
+    pub fn new(
+        cookie_name: String,
+        allowed_origin: String,
+        smtp_server: String,
+        smtp_sender_address: String,
+        smtp_username: String,
+        smtp_password: String,
+    ) -> Result<Self, Error> {
         let allowed_origin: HeaderValue = match allowed_origin.parse() {
             Ok(allowed_origin) => allowed_origin,
             Err(err) => {
@@ -277,14 +163,20 @@ impl AuthManager {
             Arc::new(RwLock::new(HashMap::new()));
         let users: Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, HashMap<_, _>>> =
             Arc::new(RwLock::new(HashMap::new()));
-
         let encryption_keys: EncryptionKeys = EncryptionKeys::new()?;
+        let smtp_manager: SmtpManager = SmtpManager::new(
+            smtp_server,
+            smtp_sender_address,
+            smtp_username,
+            smtp_password,
+        )?;
         Ok(Self {
             users,
             email_to_id_registry,
             regexes: Regexes::default(),
             config: Config::new(cookie_name, allowed_origin),
             encryption_keys,
+            smtp_manager,
         })
     }
 }

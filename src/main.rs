@@ -13,6 +13,7 @@ use chrono::{DateTime, Duration, Utc};
 use directories::BaseDirs;
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::io::stdout;
 use std::net::SocketAddr;
 use std::sync::{atomic::AtomicBool, Arc};
@@ -116,10 +117,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let subscriber = Registry::default().with(stdout_layer).with(logfile_layer);
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
+    //smtp
+    let smtp_server: String = "mail.smtp2go.com".to_string();
+    let smtp_sender_address: String = env::var("SMTP_SENDER_ADDRESS").unwrap();
+    let smtp_username: String = env::var("SMTP_USER").unwrap();
+    let smtp_password: String = env::var("SMTP_PASSWORD").unwrap();
+
     let stop_notify = Arc::new(Notify::new());
     let stop = Arc::new(AtomicBool::new(false));
     let security_manager = Arc::new(DummySecurityManager::default());
-    let auth_manager = match AuthManager::new(cookie_name, allowed_origin) {
+    let auth_manager = match AuthManager::new(
+        cookie_name,
+        allowed_origin,
+        smtp_server,
+        smtp_sender_address,
+        smtp_username,
+        smtp_password,
+    ) {
         Ok(auth_manager) => auth_manager,
         Err(err) => {
             panic!("{}", err);
@@ -127,12 +141,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     {
         //debug
-        if let Ok(invite_link) =
+        if let Ok(invite_token) =
             auth_manager.invite_user(EmailAddress::new_unchecked("alexinicolaspeck@gmail.com"))
         {
-            println!("{}", invite_link);
+            println!("{}", invite_token);
+            if let Err(err) = auth_manager.smtp_manager.send_email_to_recipient(
+                "alexinicolaspeck@gmail.com".into(),
+                "Invite Link".into(),
+                format!("http://dev.clouduam.com:81/invite?token={invite_token}"),
+            ) {
+                panic!("{}", err);
+            }
         }
-        //auth_manager.setup_user(&EmailAddress::new_unchecked("alexinicolaspeck@gmail.com"), "vK9AzpihNTCvH%YTmfx8uaMDDZ3^L%79DJDXdZCpKXYgrjN4p3Ff$qf3v4kRN&AN@Lve4z#Bf&pv^Ra@f@kKKEpW^WCra&PK^Gq@dcg@gRwVAUUfvE*@ZwpU^TVHKw35".to_string(), "Alexi Peck".to_string(), "HX4IXEYSPJMHEG36YNEOQDPTKAUDF6YMFBDRCO3Z5LWXQGVO25KOTVWB2UOYWJFH".to_string()).unwrap();
     }
 
     let auth_manager = Arc::new(auth_manager);

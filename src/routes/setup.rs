@@ -81,7 +81,9 @@ fn setup_user_account(
     match auth.get_code(&user_invite_instance.get_two_fa_client_secret(), 0) {
         Ok(current_code) => {
             if credentials.two_fa_code != current_code {
-                return Err(InternalError::AccountSetup(AccountSetupError::Incorrect2FACode).into());
+                return Err(
+                    InternalError::AccountSetup(AccountSetupError::Incorrect2FACode).into(),
+                );
             }
         }
         Err(err) => {
