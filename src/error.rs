@@ -136,6 +136,8 @@ pub enum AccountSetupError {
     UserNotFound(Uuid),
     #[error("CouldntGetUserIDFromEmail")]
     CouldntGetUserIDFromEmail,
+    #[error("InvalidInvite")]
+    InvalidInvite,
 }
 
 #[derive(Error, Debug)]

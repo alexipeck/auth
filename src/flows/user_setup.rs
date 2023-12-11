@@ -11,6 +11,15 @@ pub struct UserInvite {
     user_id: Uuid,
 }
 
+impl UserInvite {
+    pub fn get_email(&self) -> &EmailAddress {
+        &self.email
+    }
+    pub fn get_user_id(&self) -> &Uuid {
+        &self.user_id
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserInviteInstance {
     email: EmailAddress,

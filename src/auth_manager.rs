@@ -206,6 +206,13 @@ impl AuthManager {
         Ok((token, expiry))
     }
 
+    pub fn user_setup_incomplete(&self, user_id: &Uuid) -> Option<bool> {
+        if let Some(user) = self.users.read().get(user_id) {
+            return Some(user.incomplete())
+        }
+        None
+    }
+
     pub fn validate_invite_token(
         &self,
         token: String,
