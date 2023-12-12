@@ -22,8 +22,8 @@ impl UserSession {
         symmetric_key: &[u8],
         iv: &[u8],
     ) -> Result<Self, Error> {
-        let read_expiry: DateTime<Utc> = Utc::now() + Duration::minutes(60);
-        let write_expiry: DateTime<Utc> = Utc::now() + Duration::minutes(20);
+        let read_expiry: DateTime<Utc> = Utc::now() + Duration::seconds(90);
+        let write_expiry: DateTime<Utc> = Utc::now() + Duration::minutes(1);
         let read_token: String = Token::create_signed_and_encrypted(
             UserAccessToken::new(AccessLevel::Read, user_id),
             read_expiry.to_owned(),

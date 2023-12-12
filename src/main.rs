@@ -148,7 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Err(err) = auth_manager.smtp_manager.send_email_to_recipient(
                 "alexinicolaspeck@gmail.com".into(),
                 "Invite Link".into(),
-                format!("http://dev.clouduam.com:81/invite?token={invite_token}"),
+                format!("http://dev.clouduam.com:81/invite?token={invite_token}"),//https://clouduam.com
             ) {
                 panic!("{}", err);
             }
