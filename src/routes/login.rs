@@ -4,7 +4,7 @@ use crate::{
     error::Error,
     flows::user_login::{LoginCredentials, LoginFlow, UserLogin},
     response::{FullResponseData, ResponseData},
-    user_session::UserSession,
+    user_session::UserSession, user::{ClientState, UserProfile},
 };
 use axum::{extract::ConnectInfo, http::HeaderMap, response::IntoResponse, Extension};
 use chrono::Duration;
@@ -46,25 +46,25 @@ fn login_with_credentials(
     user_login: UserLogin,
     headers: HeaderMap,
     auth_manager: Arc<AuthManager>,
-) -> Result<UserSession, Error> {
+) -> Result<ClientState, Error> {
     auth_manager.verify_flow::<Option<bool>>(&user_login.key, &headers)?;
     let credentials: LoginCredentials = decrypt_url_safe_base64_with_private_key::<LoginCredentials>(
         user_login.encrypted_credentials,
         &auth_manager.encryption_keys.get_private_decryption_key(),
     )?;
-    let user_id = auth_manager.validate_user_credentials(
+    let user_profile = auth_manager.validate_user_credentials(
         &credentials.email,
         &credentials.password,
         credentials.two_fa_code,
     )?;
     let user_session = UserSession::create_from_user_id(
-        user_id,
+        user_profile.user_id,
         auth_manager.encryption_keys.get_private_signing_key(),
         auth_manager.encryption_keys.get_symmetric_key(),
         auth_manager.encryption_keys.get_iv(),
     )?;
-    println!("User {} authenticated.", user_id);
-    Ok(user_session)
+    println!("User authenticated: ({}, {}, {})", user_profile.display_name, user_profile.email, user_profile.user_id);
+    Ok(ClientState { user_session, user_profile })
 }
 
 pub async fn login_with_credentials_route(
@@ -77,8 +77,8 @@ pub async fn login_with_credentials_route(
     //println!("{:?}", headers);
     //println!("{:?}", cookie);
     match login_with_credentials(user_login, headers, auth_manager) {
-        Ok(user_session) => {
-            FullResponseData::basic(ResponseData::UserSession(user_session)).into_response()
+        Ok(client_state) => {
+            FullResponseData::basic(ResponseData::ClientState(client_state)).into_response()
         }
         Err(err) => {
             warn!("{}", err);

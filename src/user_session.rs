@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 /// Client representation of their session, with read and write being their tokenised rights for read and write at any given time,
 /// each with their own expiry with writes having much shorter expiry and requiring periodic upgrade using 2FA code to perform write actions
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, /* Deserialize */)]
 pub struct UserSession {
     read_token: String,
     read_expiry: DateTime<Utc>,

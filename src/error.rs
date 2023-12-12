@@ -40,8 +40,6 @@ pub enum AuthenticationError {
     Invalid2FASecret,
     #[error("")]
     InvalidInviteToken,
-    #[error("AuthorisationProfileNotFound({0})")]
-    AuthorisationProfileNotFound(Uuid),
     #[error("UserNotFound({0})")]
     UserNotFound(Uuid),
     #[error("AccessDenied({0})")]

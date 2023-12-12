@@ -9,7 +9,7 @@ use crate::{
     r#trait::HashDebug,
     smtp_manager::SmtpManager,
     token::Token,
-    user::User,
+    user::{User, UserProfile},
 };
 use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
@@ -309,7 +309,7 @@ impl AuthManager {
         email: &EmailAddress,
         password: &String,
         two_factor_code: String,
-    ) -> Result<Uuid, Error> {
+    ) -> Result<UserProfile, Error> {
         match self.email_to_id_registry.read().get(email) {
             Some(user_id) => match self.users.read().get(user_id) {
                 Some(user) => {
@@ -329,7 +329,7 @@ impl AuthManager {
                                 match auth.get_code(&user.get_two_fa_client_secret(), 0) {
                                     Ok(current_code) => {
                                         if two_factor_code == current_code {
-                                            Ok(*user.get_id())
+                                            Ok(user.to_user_profile())
                                         } else {
                                             Err(InternalError::Authentication(
                                                 AuthenticationError::Incorrect2FACode,

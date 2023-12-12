@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     cryptography::generate_token,
-    error::{AccountSetupError, Error, InternalError},
+    error::{AccountSetupError, Error, InternalError}, user_session::UserSession,
 };
 
 #[derive(Serialize, Debug, Clone)]
@@ -39,7 +39,9 @@ impl User {
             || self.hashed_and_salted_password.is_empty()
             || self.two_fa_client_secret.is_empty()
     }
-
+    pub fn to_user_profile(&self) -> UserProfile {
+        UserProfile { display_name: self.display_name.to_owned(), email: self.email.to_owned(), user_id: self.id.to_owned() }
+    }
     /// This function is only allowed to be called once.
     pub fn setup_user(
         &mut self,
@@ -83,4 +85,17 @@ impl User {
     pub fn get_two_fa_client_secret(&self) -> &String {
         &self.two_fa_client_secret
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserProfile {
+    pub display_name: String,
+    pub email: EmailAddress,
+    pub user_id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ClientState {
+    pub user_session: UserSession,
+    pub user_profile: UserProfile,
 }

@@ -1,7 +1,7 @@
 use crate::{
     flows::{user_login::LoginFlow, user_setup::UserSetupFlow},
     serde::datetime_utc,
-    user_session::UserSession,
+    user_session::UserSession, user::ClientState,
 };
 use axum::{
     body::Body,
@@ -45,7 +45,7 @@ pub struct UserAuthenticated {
 pub enum ResponseData {
     InitLoginFlow(LoginFlow),
     UserAuthenticated(UserAuthenticated),
-    UserSession(UserSession),
+    ClientState(ClientState),
     InitSetupFlow(UserSetupFlow),
     SetupComplete,
     CredentialsRejected,
@@ -84,7 +84,7 @@ impl IntoResponse for FullResponseData {
         let status_code = match self.response_data {
             ResponseData::InitLoginFlow(_)
             | ResponseData::UserAuthenticated(_)
-            | ResponseData::UserSession(_)
+            | ResponseData::ClientState(_)
             | ResponseData::InitSetupFlow(_)
             | ResponseData::SetupComplete => StatusCode::OK,
             ResponseData::CredentialsRejected | ResponseData::Unauthorised => {
