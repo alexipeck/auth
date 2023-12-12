@@ -6,7 +6,7 @@ use google_authenticator::GAError;
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::impl_error_wrapper;
+use crate::{impl_error_wrapper, auth_server::RequiredProperties};
 
 #[derive(Error, Debug)]
 pub enum AuthFlowError {
@@ -179,6 +179,12 @@ pub enum SmtpError {
 }
 
 #[derive(Error, Debug)]
+pub enum AuthServerBuildError {
+    #[error("MissingProperties({0})")]
+    MissingProperties(String)
+}
+
+#[derive(Error, Debug)]
 pub enum InternalError {
     #[error("AuthFlow({0})")]
     AuthFlow(#[from] AuthFlowError),
@@ -198,6 +204,8 @@ pub enum InternalError {
     Login(#[from] LoginError),
     #[error("Smtp({0})")]
     Smtp(SmtpError),
+    #[error("AuthServerBuild({0})")]
+    AuthServerBuild(AuthServerBuildError),
 }
 
 #[derive(Error, Debug)]

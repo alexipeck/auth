@@ -92,9 +92,6 @@ pub async fn run_rest_server(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cookie_name: String = "uamtoken".to_string(); //This won't exist and will be passed down from AuthManager
-    let allowed_origin: String = "http://dev.clouduam.com:81".to_owned(); //https://clouduam.com
-
     let base_dirs = BaseDirs::new().unwrap();
     let log_path = base_dirs.config_dir().join("auth/logs/");
 
@@ -116,6 +113,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_writer(file_writer);
     let subscriber = Registry::default().with(stdout_layer).with(logfile_layer);
     tracing::subscriber::set_global_default(subscriber).unwrap();
+
+    
+    let cookie_name: String = "uamtoken".to_string(); //This won't exist and will be passed down from AuthManager
+    let allowed_origin: String = "http://dev.clouduam.com:81".to_owned(); //https://clouduam.com
 
     //smtp
     let smtp_server: String = "mail.smtp2go.com".to_string();
@@ -155,7 +156,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let auth_manager = Arc::new(auth_manager);
+    let auth_manager: Arc<AuthManager> = Arc::new(auth_manager);
 
     run_rest_server(auth_manager, security_manager, stop, stop_notify).await;
 

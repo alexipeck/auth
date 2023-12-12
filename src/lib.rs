@@ -23,6 +23,7 @@ pub mod token;
 pub mod r#trait;
 pub mod user;
 pub mod user_session;
+pub mod auth_server;
 
 ///hashes with blake3
 pub fn hash_string(data: &str) -> String {
