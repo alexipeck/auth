@@ -83,4 +83,12 @@ impl UserAccessToken {
             __salt: Uuid::new_v4(),
         }
     }
+
+    pub fn get_access_level(&self) -> &AccessLevel {
+        &self.access_level
+    }
+
+    pub fn get_user_id(&self) -> &Uuid {
+        &self.user_id
+    }
 }
