@@ -220,6 +220,15 @@ impl AuthManager {
         )
     }
 
+    pub fn email_exists(&self, email: &EmailAddress) -> bool {
+        for (_, user) in self.users.read().iter() {
+            if user.get_email() == email {
+                return true;
+            }
+        }
+        return false;
+    }
+
     pub fn verify_and_decrypt_token(
         &self,
         token: String,
@@ -267,7 +276,7 @@ impl AuthManager {
         }
     }
 
-    pub fn invite_user(&self, email: EmailAddress) -> Result<String, Error> {
+    pub fn invite_user(&self, email: EmailAddress) -> Result<Uuid, Error> {
         let user_id: Uuid = self.generate_user_uid();
         let user: User = User::new(
             user_id,
@@ -285,7 +294,13 @@ impl AuthManager {
         )?;
         let _ = self.users.write().insert(user_id, user);
         self.email_to_id_registry.write().insert(email, user_id);
-        Ok(invite_token)
+        println!("{}", invite_token);
+        self.smtp_manager.send_email_to_recipient(
+            "alexinicolaspeck@gmail.com".into(),
+            "Invite Link".into(),
+            format!("http://dev.clouduam.com:81/invite?token={invite_token}"), //https://clouduam.com
+        )?;
+        Ok(user_id)
     }
 
     pub fn setup_user(

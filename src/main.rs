@@ -8,7 +8,7 @@ use std::sync::{atomic::AtomicBool, Arc};
 use tokio::signal;
 use tokio::sync::Notify;
 use tracing::level_filters::LevelFilter;
-use tracing::{error, Level};
+use tracing::{error, warn, Level};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{Layer, Registry};
 
@@ -55,22 +55,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => panic!("{}", err),
     };
     //testing
-    if let Ok(invite_token) = auth_server
+    if let Err(err) = auth_server
         .auth_manager
         .invite_user(EmailAddress::new_unchecked("alexinicolaspeck@gmail.com"))
     {
-        println!("{}", invite_token);
-        if let Err(err) = auth_server
-            .auth_manager
-            .smtp_manager
-            .send_email_to_recipient(
-                "alexinicolaspeck@gmail.com".into(),
-                "Invite Link".into(),
-                format!("http://dev.clouduam.com:81/invite?token={invite_token}"), //https://clouduam.com
-            )
-        {
-            panic!("{}", err);
-        }
+        warn!("{}", err);
     }
 
     match signal::ctrl_c().await {
