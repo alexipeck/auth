@@ -1,8 +1,7 @@
 use crate::{
-    cryptography::{generate_token, EncryptionKeys},
+    cryptography::EncryptionKeys,
     error::{
-        AccountSetupError, AuthenticationError, EncryptionError, Error, InternalError, LoginError,
-        OpenSSLError, StartupError, Utf8Error,
+        AccountSetupError, AuthenticationError, Error, InternalError, LoginError, StartupError,
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
@@ -15,15 +14,10 @@ use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use google_authenticator::GoogleAuthenticator;
-use openssl::{
-    pkey::{PKey, Private, Public},
-    rsa::Rsa,
-};
 use parking_lot::RwLock;
-use rand::Rng;
 use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{collections::HashMap, str::from_utf8, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 pub struct Regexes {

@@ -4,7 +4,7 @@ use crate::{
     error::Error,
     flows::user_login::{LoginCredentials, LoginFlow, UserLogin},
     response::{FullResponseData, ResponseData},
-    user::{ClientState, UserProfile},
+    user::ClientState,
     user_session::UserSession,
 };
 use axum::{extract::ConnectInfo, http::HeaderMap, response::IntoResponse, Extension};

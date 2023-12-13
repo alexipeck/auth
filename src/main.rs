@@ -1,9 +1,6 @@
 use auth::auth_server::AuthServer;
-use auth::serde::datetime_utc;
-use chrono::{DateTime, Utc};
 use directories::BaseDirs;
 use email_address::EmailAddress;
-use serde::{Deserialize, Serialize};
 use std::env;
 use std::io::stdout;
 use std::sync::atomic::Ordering;
@@ -14,30 +11,6 @@ use tracing::level_filters::LevelFilter;
 use tracing::{error, Level};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{Layer, Registry};
-
-pub struct DummySecurityManager {}
-
-impl Default for DummySecurityManager {
-    fn default() -> Self {
-        Self {}
-    }
-}
-
-impl DummySecurityManager {}
-
-#[derive(Debug, Serialize)]
-struct TwoFAVerified {
-    jwt: String,
-    #[serde(with = "datetime_utc")]
-    expiry: DateTime<Utc>,
-}
-
-#[derive(Debug, Deserialize)]
-struct AccountSetup {
-    invite_key: String,
-    password: String,
-    two_fa_code: [u8; 6],
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -83,22 +56,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     //testing
     if let Ok(invite_token) = auth_server
-    .auth_manager
-    .invite_user(EmailAddress::new_unchecked("alexinicolaspeck@gmail.com"))
-{
-    println!("{}", invite_token);
-    if let Err(err) = auth_server
         .auth_manager
-        .smtp_manager
-        .send_email_to_recipient(
-            "alexinicolaspeck@gmail.com".into(),
-            "Invite Link".into(),
-            format!("http://dev.clouduam.com:81/invite?token={invite_token}"), //https://clouduam.com
-        )
+        .invite_user(EmailAddress::new_unchecked("alexinicolaspeck@gmail.com"))
     {
-        panic!("{}", err);
+        println!("{}", invite_token);
+        if let Err(err) = auth_server
+            .auth_manager
+            .smtp_manager
+            .send_email_to_recipient(
+                "alexinicolaspeck@gmail.com".into(),
+                "Invite Link".into(),
+                format!("http://dev.clouduam.com:81/invite?token={invite_token}"), //https://clouduam.com
+            )
+        {
+            panic!("{}", err);
+        }
     }
-}
 
     match signal::ctrl_c().await {
         Ok(_) => {
