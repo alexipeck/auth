@@ -208,7 +208,7 @@ impl AuthManager {
 
     pub fn user_setup_incomplete(&self, user_id: &Uuid) -> Option<bool> {
         if let Some(user) = self.users.read().get(user_id) {
-            return Some(user.incomplete())
+            return Some(user.incomplete());
         }
         None
     }

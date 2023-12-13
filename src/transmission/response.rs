@@ -1,7 +1,8 @@
 use crate::{
     flows::{user_login::LoginFlow, user_setup::UserSetupFlow},
     serde::datetime_utc,
-    user_session::UserSession, user::ClientState,
+    user::ClientState,
+    user_session::UserSession,
 };
 use axum::{
     body::Body,

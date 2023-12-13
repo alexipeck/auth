@@ -4,7 +4,8 @@ use crate::{
     error::Error,
     flows::user_login::{LoginCredentials, LoginFlow, UserLogin},
     response::{FullResponseData, ResponseData},
-    user_session::UserSession, user::{ClientState, UserProfile},
+    user::{ClientState, UserProfile},
+    user_session::UserSession,
 };
 use axum::{extract::ConnectInfo, http::HeaderMap, response::IntoResponse, Extension};
 use chrono::Duration;
@@ -63,8 +64,14 @@ fn login_with_credentials(
         auth_manager.encryption_keys.get_symmetric_key(),
         auth_manager.encryption_keys.get_iv(),
     )?;
-    println!("User authenticated: ({}, {}, {})", user_profile.display_name, user_profile.email, user_profile.user_id);
-    Ok(ClientState { user_session, user_profile })
+    println!(
+        "User authenticated: ({}, {}, {})",
+        user_profile.display_name, user_profile.email, user_profile.user_id
+    );
+    Ok(ClientState {
+        user_session,
+        user_profile,
+    })
 }
 
 pub async fn login_with_credentials_route(

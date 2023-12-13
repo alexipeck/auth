@@ -4,6 +4,7 @@ use regex::RegexSet;
 use std::collections::BTreeMap;
 
 pub mod auth_manager;
+pub mod auth_server;
 #[path = "./routes/base.rs"]
 pub mod base;
 #[path = "./transmission/bidirectional.rs"]
@@ -23,7 +24,6 @@ pub mod token;
 pub mod r#trait;
 pub mod user;
 pub mod user_session;
-pub mod auth_server;
 
 ///hashes with blake3
 pub fn hash_string(data: &str) -> String {

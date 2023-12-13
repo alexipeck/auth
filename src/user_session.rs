@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 /// Client representation of their session, with read and write being their tokenised rights for read and write at any given time,
 /// each with their own expiry with writes having much shorter expiry and requiring periodic upgrade using 2FA code to perform write actions
-#[derive(Debug, Serialize, /* Deserialize */)]
+#[derive(Debug, Serialize /* Deserialize */)]
 pub struct UserSession {
     read_token: String,
     read_expiry: DateTime<Utc>,
@@ -22,8 +22,8 @@ impl UserSession {
         symmetric_key: &[u8],
         iv: &[u8],
     ) -> Result<Self, Error> {
-        let read_expiry: DateTime<Utc> = Utc::now() + Duration::seconds(90);
-        let write_expiry: DateTime<Utc> = Utc::now() + Duration::minutes(1);
+        let read_expiry: DateTime<Utc> = Utc::now() + Duration::minutes(30);
+        let write_expiry: DateTime<Utc> = Utc::now() + Duration::minutes(5);
         let read_token: String = Token::create_signed_and_encrypted(
             UserAccessToken::new(AccessLevel::Read, user_id),
             read_expiry.to_owned(),

@@ -1,27 +1,17 @@
-use auth::auth_manager::AuthManager;
-use auth::base::debug_route;
-use auth::flows::user_setup::UserInvite;
-use auth::routes::login::{init_login_flow_route, login_with_credentials_route};
-use auth::routes::setup::{setup_user_account_route, validate_invite_token_route};
+use auth::auth_server::AuthServer;
 use auth::serde::datetime_utc;
-use auth::token::Token;
-use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE};
-use axum::http::Method;
-use axum::routing::{get, post};
-use axum::{extract::Extension, Router};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use directories::BaseDirs;
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::io::stdout;
-use std::net::SocketAddr;
+use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicBool, Arc};
-use tokio::net::TcpListener;
+use tokio::signal;
 use tokio::sync::Notify;
-use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::level_filters::LevelFilter;
-use tracing::Level;
+use tracing::{error, Level};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{Layer, Registry};
 
@@ -49,47 +39,6 @@ struct AccountSetup {
     two_fa_code: [u8; 6],
 }
 
-pub async fn run_rest_server(
-    auth_manager: Arc<AuthManager>,
-    security_manager: Arc<DummySecurityManager>,
-    _stop: Arc<AtomicBool>,
-    stop_notify: Arc<Notify>,
-) {
-    let cors = CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST])
-        .allow_headers(vec![CONTENT_TYPE, AUTHORIZATION, COOKIE])
-        /* .allow_origin(AllowOrigin::exact("https://clouduam.com".parse().unwrap())) */
-        .allow_origin(AllowOrigin::exact(
-            auth_manager.config.get_allowed_origin().to_owned(),
-        ))
-        .allow_credentials(true);
-
-    let app = Router::new()
-        .route("/login/init-login-flow", get(init_login_flow_route))
-        .route("/debug", post(debug_route))
-        .route("/login/credentials", post(login_with_credentials_route))
-        .route("/setup/init-setup-flow", post(validate_invite_token_route))
-        .route("/setup/credentials", post(setup_user_account_route))
-        /* .route("/logout", post(logout)) */
-        /* .layer(TraceLayer::new_for_http()) */
-        .layer(cors)
-        .layer(Extension(security_manager))
-        .layer(Extension(auth_manager));
-
-    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 8886));
-    let listener = TcpListener::bind(addr).await.unwrap();
-    println!("REST endpoint listening on {}", addr);
-
-    tokio::select! {
-        result = async { axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await } => {
-            if let Err(err) = result {
-                println!("{}", err);
-            }
-        }
-        _ = stop_notify.notified() => {},
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let base_dirs = BaseDirs::new().unwrap();
@@ -114,51 +63,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let subscriber = Registry::default().with(stdout_layer).with(logfile_layer);
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    
-    let cookie_name: String = "uamtoken".to_string(); //This won't exist and will be passed down from AuthManager
-    let allowed_origin: String = "http://dev.clouduam.com:81".to_owned(); //https://clouduam.com
-
-    //smtp
-    let smtp_server: String = "mail.smtp2go.com".to_string();
-    let smtp_sender_address: String = env::var("SMTP_SENDER_ADDRESS").unwrap();
-    let smtp_username: String = env::var("SMTP_USER").unwrap();
-    let smtp_password: String = env::var("SMTP_PASSWORD").unwrap();
-
     let stop_notify = Arc::new(Notify::new());
     let stop = Arc::new(AtomicBool::new(false));
-    let security_manager = Arc::new(DummySecurityManager::default());
-    let auth_manager = match AuthManager::new(
-        cookie_name,
-        allowed_origin,
-        smtp_server,
-        smtp_sender_address,
-        smtp_username,
-        smtp_password,
-    ) {
-        Ok(auth_manager) => auth_manager,
-        Err(err) => {
-            panic!("{}", err);
-        }
-    };
+
+    let auth_server: Arc<AuthServer> = match AuthServer::builder()
+        .cookie_name("uamtoken".to_string())
+        .allowed_origin("http://dev.clouduam.com:81".to_owned()) //https://clouduam.com
+        .smtp_server("mail.smtp2go.com".to_string())
+        .smtp_sender_address(env::var("SMTP_SENDER_ADDRESS").unwrap())
+        .smtp_username(env::var("SMTP_USER").unwrap())
+        .smtp_password(env::var("SMTP_PASSWORD").unwrap())
+        .stop(stop.to_owned())
+        .stop_notify(stop_notify.to_owned())
+        .start_server()
+        .await
     {
-        //debug
-        if let Ok(invite_token) =
-            auth_manager.invite_user(EmailAddress::new_unchecked("alexinicolaspeck@gmail.com"))
-        {
-            println!("{}", invite_token);
-            if let Err(err) = auth_manager.smtp_manager.send_email_to_recipient(
-                "alexinicolaspeck@gmail.com".into(),
-                "Invite Link".into(),
-                format!("http://dev.clouduam.com:81/invite?token={invite_token}"),//https://clouduam.com
-            ) {
-                panic!("{}", err);
-            }
-        }
+        Ok(auth_server) => auth_server,
+        Err(err) => panic!("{}", err),
+    };
+    //testing
+    if let Ok(invite_token) = auth_server
+    .auth_manager
+    .invite_user(EmailAddress::new_unchecked("alexinicolaspeck@gmail.com"))
+{
+    println!("{}", invite_token);
+    if let Err(err) = auth_server
+        .auth_manager
+        .smtp_manager
+        .send_email_to_recipient(
+            "alexinicolaspeck@gmail.com".into(),
+            "Invite Link".into(),
+            format!("http://dev.clouduam.com:81/invite?token={invite_token}"), //https://clouduam.com
+        )
+    {
+        panic!("{}", err);
     }
+}
 
-    let auth_manager: Arc<AuthManager> = Arc::new(auth_manager);
-
-    run_rest_server(auth_manager, security_manager, stop, stop_notify).await;
+    match signal::ctrl_c().await {
+        Ok(_) => {
+            stop.store(true, Ordering::SeqCst);
+            stop_notify.notify_waiters();
+        }
+        Err(err) => error!("{}", err),
+    }
 
     Ok(())
 }

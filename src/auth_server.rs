@@ -1,14 +1,36 @@
 use core::fmt;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::{
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
-use tokio::sync::Notify;
+use axum::{
+    http::{
+        header::{AUTHORIZATION, CONTENT_TYPE, COOKIE},
+        Method,
+    },
+    routing::{get, post},
+    Extension, Router,
+};
+use tokio::{net::TcpListener, sync::Notify};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
-use crate::{error::{Error, InternalError, AuthServerBuildError}, auth_manager::AuthManager};
-
+use crate::{
+    auth_manager::AuthManager,
+    base::debug_route,
+    error::{AuthServerBuildError, Error, InternalError},
+    routes::{
+        login::{init_login_flow_route, login_with_credentials_route},
+        setup::{setup_user_account_route, validate_invite_token_route},
+    },
+};
 
 pub struct Signals {
-    stop: Arc<AtomicBool>,
-    stop_notify: Arc<Notify>,
+    pub stop: Arc<AtomicBool>,
+    pub stop_notify: Arc<Notify>,
 }
 
 impl Signals {
@@ -50,6 +72,45 @@ impl fmt::Display for RequiredProperties {
                 Self::SMTPPassword => "SMTPPassword",
             }
         )
+    }
+}
+
+async fn start_server(auth_server: Arc<AuthServer>) {
+    let cors = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers(vec![CONTENT_TYPE, AUTHORIZATION, COOKIE])
+        /* .allow_origin(AllowOrigin::exact("https://clouduam.com".parse().unwrap())) */
+        .allow_origin(AllowOrigin::exact(
+            auth_server
+                .auth_manager
+                .config
+                .get_allowed_origin()
+                .to_owned(),
+        ))
+        .allow_credentials(true);
+
+    let app = Router::new()
+        .route("/login/init-login-flow", get(init_login_flow_route))
+        .route("/debug", post(debug_route))
+        .route("/login/credentials", post(login_with_credentials_route))
+        .route("/setup/init-setup-flow", post(validate_invite_token_route))
+        .route("/setup/credentials", post(setup_user_account_route))
+        /* .route("/logout", post(logout)) */
+        /* .layer(TraceLayer::new_for_http()) */
+        .layer(cors)
+        .layer(Extension(auth_server.auth_manager.to_owned()));
+
+    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 8886));
+    let listener = TcpListener::bind(addr).await.unwrap();
+    println!("REST endpoint listening on {}", addr);
+
+    tokio::select! {
+        result = async { axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await } => {
+            if let Err(err) = result {
+                println!("{}", err);
+            }
+        }
+        _ = auth_server.signals.stop_notify.notified() => {},
     }
 }
 
@@ -115,7 +176,7 @@ impl Builder {
         self
     }
 
-    pub fn build(self) -> Result<AuthServer, Error> {
+    pub async fn start_server(self) -> Result<Arc<AuthServer>, Error> {
         let mut missing_properties: Vec<RequiredProperties> = Vec::new();
         if self.cookie_name.is_none() {
             missing_properties.push(RequiredProperties::CookieName)
@@ -136,7 +197,13 @@ impl Builder {
             missing_properties.push(RequiredProperties::SMTPPassword)
         }
         if !missing_properties.is_empty() {
-            return Err(InternalError::AuthServerBuild(AuthServerBuildError::MissingProperties(format!("{:?}", missing_properties))).into())
+            return Err(
+                InternalError::AuthServerBuild(AuthServerBuildError::MissingProperties(format!(
+                    "{:?}",
+                    missing_properties
+                )))
+                .into(),
+            );
         }
         let auth_manager: AuthManager = AuthManager::new(
             self.cookie_name.unwrap(),
@@ -148,9 +215,18 @@ impl Builder {
         )?;
         let signals = Signals {
             stop: self.stop.unwrap_or(Arc::new(AtomicBool::new(false))),
-            stop_notify: self.stop_notify.unwrap_or(Arc::new(Notify::new()))
+            stop_notify: self.stop_notify.unwrap_or(Arc::new(Notify::new())),
         };
-        Ok(AuthServer { auth_manager: Arc::new(auth_manager), signals })
+
+        let auth_server: Arc<AuthServer> = Arc::new(AuthServer {
+            auth_manager: Arc::new(auth_manager),
+            signals,
+        });
+
+        let auth_server_ = auth_server.to_owned();
+        tokio::spawn(async move { start_server(auth_server_).await });
+
+        Ok(auth_server)
     }
 }
 

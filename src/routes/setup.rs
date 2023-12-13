@@ -21,11 +21,14 @@ fn validate_invite_token(
 ) -> Result<UserSetupFlow, Error> {
     let (user_invite_instance, expiry) = {
         let (user_invite, expiry) = auth_manager.validate_invite_token(invite_token)?;
-        let user_setup_incomplete: Option<bool> = auth_manager.user_setup_incomplete(user_invite.get_user_id());
+        let user_setup_incomplete: Option<bool> =
+            auth_manager.user_setup_incomplete(user_invite.get_user_id());
         if user_setup_incomplete.is_none() {
-            return Err(InternalError::AccountSetup(AccountSetupError::InvalidInvite).into())
+            return Err(InternalError::AccountSetup(AccountSetupError::InvalidInvite).into());
         } else if user_setup_incomplete.unwrap() == false {
-            return Err(InternalError::AccountSetup(AccountSetupError::AccountSetupNotIncomplete).into())
+            return Err(
+                InternalError::AccountSetup(AccountSetupError::AccountSetupNotIncomplete).into(),
+            );
         }
         (UserInviteInstance::from_user_invite(user_invite), expiry)
     };
@@ -77,11 +80,14 @@ fn setup_user_account(
 ) -> Result<(), Error> {
     let user_invite_instance: UserInviteInstance =
         auth_manager.verify_flow::<UserInviteInstance>(&user_setup.key, headers)?;
-    let user_setup_incomplete: Option<bool> = auth_manager.user_setup_incomplete(user_invite_instance.get_user_id());
+    let user_setup_incomplete: Option<bool> =
+        auth_manager.user_setup_incomplete(user_invite_instance.get_user_id());
     if user_setup_incomplete.is_none() {
-        return Err(InternalError::AccountSetup(AccountSetupError::InvalidInvite).into())
+        return Err(InternalError::AccountSetup(AccountSetupError::InvalidInvite).into());
     } else if user_setup_incomplete.unwrap() == false {
-        return Err(InternalError::AccountSetup(AccountSetupError::AccountSetupNotIncomplete).into())
+        return Err(
+            InternalError::AccountSetup(AccountSetupError::AccountSetupNotIncomplete).into(),
+        );
     }
     let credentials: SetupCredentials = decrypt_url_safe_base64_with_private_key::<SetupCredentials>(
         user_setup.encrypted_credentials,
