@@ -9,6 +9,7 @@ use crate::{
     smtp_manager::SmtpManager,
     token::Token,
     user::{User, UserProfile},
+    user_session::UserAccessToken,
 };
 use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
@@ -212,6 +213,18 @@ impl AuthManager {
         token: String,
     ) -> Result<(UserInvite, DateTime<Utc>), Error> {
         Token::verify_and_decrypt::<UserInvite>(
+            &token,
+            self.encryption_keys.get_public_signing_key(),
+            self.encryption_keys.get_symmetric_key(),
+            self.encryption_keys.get_iv(),
+        )
+    }
+
+    pub fn verify_and_decrypt_token(
+        &self,
+        token: String,
+    ) -> Result<(UserAccessToken, DateTime<Utc>), Error> {
+        Token::verify_and_decrypt::<UserAccessToken>(
             &token,
             self.encryption_keys.get_public_signing_key(),
             self.encryption_keys.get_symmetric_key(),
