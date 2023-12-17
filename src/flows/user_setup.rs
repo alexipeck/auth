@@ -3,7 +3,9 @@ use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{cryptography::generate_random_base32_string, serde::datetime_utc};
+use crate::{
+    cryptography::generate_random_base32_string, serde::datetime_utc, user_session::TokenPair,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserInvite {
@@ -84,26 +86,22 @@ pub enum SetupResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserSetupFlow {
-    token: String,
+    token_pair: TokenPair,
     email: EmailAddress,
-    #[serde(with = "datetime_utc")]
-    expiry: DateTime<Utc>,
     two_fa_client_secret: String,
     public_encryption_key: String,
 }
 
 impl UserSetupFlow {
     pub fn new(
-        token: String,
+        token_pair: TokenPair,
         email: EmailAddress,
-        expiry: DateTime<Utc>,
         two_fa_client_secret: String,
         public_encryption_key: String,
     ) -> Self {
         Self {
-            token,
+            token_pair,
             email,
-            expiry,
             two_fa_client_secret,
             public_encryption_key,
         }

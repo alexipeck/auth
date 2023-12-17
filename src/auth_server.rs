@@ -23,6 +23,7 @@ use crate::{
     base::debug_route,
     error::{AuthServerBuildError, Error, InternalError},
     routes::{
+        authenticated::refresh_read_token_route,
         login::{init_login_flow_route, login_with_credentials_route},
         setup::{setup_user_account_route, validate_invite_token_route},
     },
@@ -95,6 +96,14 @@ async fn start_server(auth_server: Arc<AuthServer>) {
         .route("/login/credentials", post(login_with_credentials_route))
         .route("/setup/init-setup-flow", post(validate_invite_token_route))
         .route("/setup/credentials", post(setup_user_account_route))
+        .route(
+            "/authenticated/refresh-read-token",
+            post(refresh_read_token_route),
+        )
+        /* .route(
+            "/authenticated/twofa-for-write-token",
+            post(get_new_write_token_route),
+        ) */
         /* .route("/logout", post(logout)) */
         /* .layer(TraceLayer::new_for_http()) */
         .layer(cors)

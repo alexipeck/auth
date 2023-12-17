@@ -179,6 +179,20 @@ pub enum SmtpError {
 }
 
 #[derive(Error, Debug)]
+pub enum ReadTokenAsRefreshTokenError {
+    #[error("InvalidHeaders")]
+    InvalidHeaders,
+    #[error("NotReadToken")]
+    NotReadToken,
+    #[error("Expired")]
+    Expired,
+    #[error("NotUsedWithinValidRefreshPeriod")]
+    NotUsedWithinValidRefreshPeriod,
+    #[error("HasHitIterationLimit")]
+    HasHitIterationLimit,
+}
+
+#[derive(Error, Debug)]
 pub enum AuthServerBuildError {
     #[error("MissingProperties({0})")]
     MissingProperties(String),
@@ -206,6 +220,8 @@ pub enum InternalError {
     Smtp(SmtpError),
     #[error("AuthServerBuild({0})")]
     AuthServerBuild(AuthServerBuildError),
+    #[error("ReadTokenAsRefreshToken({0})")]
+    ReadTokenAsRefreshToken(ReadTokenAsRefreshTokenError),
 }
 
 #[derive(Error, Debug)]

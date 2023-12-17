@@ -19,6 +19,13 @@ pub mod r#trait;
 pub mod user;
 pub mod user_session;
 
+pub const READ_LIFETIME_SECONDS: i64 = 3600;
+pub const WRITE_LIFETIME_SECONDS: i64 = 300;
+pub const REFRESH_IN_LAST_X_SECONDS: i64 = 60;
+pub const MAX_SESSION_LIFETIME_SECONDS: i64 = 36000;
+pub const MAX_READ_ITERATIONS: u32 =
+    (MAX_SESSION_LIFETIME_SECONDS / (READ_LIFETIME_SECONDS - REFRESH_IN_LAST_X_SECONDS)) as u32;
+
 ///hashes with blake3
 pub fn hash_string(data: &str) -> String {
     let mut hasher = Hasher::new();

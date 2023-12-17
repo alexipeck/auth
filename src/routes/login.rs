@@ -5,7 +5,7 @@ use crate::{
     flows::user_login::{LoginCredentials, LoginFlow, UserLogin},
     response::{FullResponseData, ResponseData},
     user::ClientState,
-    user_session::UserSession,
+    user_session::{TokenPair, UserSession},
 };
 use axum::{extract::ConnectInfo, http::HeaderMap, response::IntoResponse, Extension};
 use chrono::Duration;
@@ -13,7 +13,7 @@ use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
 
 fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result<LoginFlow, Error> {
-    let (token, expiry) = auth_manager.setup_flow::<Option<bool>>(
+    let token_pair: TokenPair = auth_manager.setup_flow_with_lifetime::<Option<bool>>(
         &headers,
         FlowType::Login,
         Duration::minutes(5),
@@ -22,11 +22,11 @@ fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result
     let public_encryption_key = auth_manager
         .encryption_keys
         .get_public_encryption_key_string()?;
-    Ok(LoginFlow::new(token, expiry, public_encryption_key))
+    Ok(LoginFlow::new(token_pair, public_encryption_key))
 }
 
 pub async fn init_login_flow_route(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
@@ -58,12 +58,8 @@ fn login_with_credentials(
         &credentials.password,
         credentials.two_fa_code,
     )?;
-    let user_session = UserSession::create_from_user_id(
-        user_profile.user_id,
-        auth_manager.encryption_keys.get_private_signing_key(),
-        auth_manager.encryption_keys.get_symmetric_key(),
-        auth_manager.encryption_keys.get_iv(),
-    )?;
+    let user_session =
+        UserSession::create_from_user_id(user_profile.user_id, headers, auth_manager)?;
     println!(
         "User authenticated: ({}, {}, {})",
         user_profile.display_name, user_profile.email, user_profile.user_id

@@ -1,15 +1,17 @@
 use crate::{
     cryptography::EncryptionKeys,
     error::{
-        AccountSetupError, AuthenticationError, Error, InternalError, LoginError, StartupError,
+        AccountSetupError, AuthenticationError, Error, InternalError, LoginError,
+        ReadTokenAsRefreshTokenError, StartupError,
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
-    r#trait::HashDebug,
+    r#trait::{Expired, HashDebug},
     smtp_manager::SmtpManager,
     token::Token,
     user::{User, UserProfile},
-    user_session::UserAccessToken,
+    user_session::{ReadMode, TokenMode, TokenPair, UserToken},
+    MAX_SESSION_LIFETIME_SECONDS, READ_LIFETIME_SECONDS, REFRESH_IN_LAST_X_SECONDS,
 };
 use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
@@ -95,6 +97,8 @@ impl Config {
 pub enum FlowType {
     Login,
     Setup,
+    Read,
+    Write,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -177,28 +181,29 @@ impl AuthManager {
 }
 
 impl AuthManager {
-    pub fn setup_flow<T: Serialize + DeserializeOwned>(
+    pub fn setup_flow_with_lifetime<T: Serialize + DeserializeOwned>(
         &self,
         headers: &HeaderMap,
         r#type: FlowType,
         lifetime: Duration,
         data: T,
-    ) -> Result<(String, DateTime<Utc>), Error> {
+    ) -> Result<TokenPair, Error> {
+        let expiry: DateTime<Utc> = Utc::now() + lifetime;
+        self.setup_flow_with_expiry(headers, r#type, expiry, data)
+    }
+
+    pub fn setup_flow_with_expiry<T: Serialize + DeserializeOwned>(
+        &self,
+        headers: &HeaderMap,
+        r#type: FlowType,
+        expiry: DateTime<Utc>,
+        data: T,
+    ) -> Result<TokenPair, Error> {
         let headers =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
-
         let key: String = headers.hash_debug();
-        let expiry: DateTime<Utc> = Utc::now() + lifetime;
-        let login_flow: Flow<T> = Flow::new(key, r#type, data);
-
-        let token: String = Token::create_signed_and_encrypted(
-            login_flow,
-            expiry,
-            self.encryption_keys.get_private_signing_key(),
-            self.encryption_keys.get_symmetric_key(),
-            self.encryption_keys.get_iv(),
-        )?;
-        Ok((token, expiry))
+        let flow: Flow<T> = Flow::new(key, r#type, data);
+        self.create_signed_and_encrypted_token_with_expiry(flow, expiry)
     }
 
     pub fn user_setup_incomplete(&self, user_id: &Uuid) -> Option<bool> {
@@ -208,12 +213,12 @@ impl AuthManager {
         None
     }
 
-    pub fn validate_invite_token(
+    pub fn verify_and_decrypt<T: Serialize + DeserializeOwned>(
         &self,
-        token: String,
-    ) -> Result<(UserInvite, DateTime<Utc>), Error> {
-        Token::verify_and_decrypt::<UserInvite>(
-            &token,
+        token: &String,
+    ) -> Result<(T, DateTime<Utc>), Error> {
+        Token::verify_and_decrypt::<T>(
+            token,
             self.encryption_keys.get_public_signing_key(),
             self.encryption_keys.get_symmetric_key(),
             self.encryption_keys.get_iv(),
@@ -229,29 +234,69 @@ impl AuthManager {
         return false;
     }
 
-    pub fn verify_and_decrypt_token(
+    pub fn generate_read_token(
         &self,
-        token: String,
-    ) -> Result<(UserAccessToken, DateTime<Utc>), Error> {
-        Token::verify_and_decrypt::<UserAccessToken>(
-            &token,
-            self.encryption_keys.get_public_signing_key(),
-            self.encryption_keys.get_symmetric_key(),
-            self.encryption_keys.get_iv(),
+        headers: &HeaderMap,
+        user_id: Uuid,
+    ) -> Result<TokenPair, Error> {
+        self.create_signed_and_encrypted_token_with_lifetime(
+            UserToken::new(
+                TokenMode::Read(Box::new(ReadMode::new(
+                    filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile)
+                        .hash_debug(),
+                    Duration::seconds(MAX_SESSION_LIFETIME_SECONDS),
+                ))),
+                user_id,
+            ),
+            Duration::seconds(READ_LIFETIME_SECONDS),
         )
+    }
+
+    pub fn refresh_read_token(
+        &self,
+        user_token: &String,
+        headers: &HeaderMap,
+    ) -> Result<TokenPair, Error> {
+        let (user_token, existing_expiry) = self.verify_and_decrypt::<UserToken>(user_token)?;
+        if existing_expiry.expired() {
+            return Err(InternalError::ReadTokenAsRefreshToken(
+                ReadTokenAsRefreshTokenError::Expired,
+            )
+            .into());
+        } else if existing_expiry.timestamp() - Utc::now().timestamp() > REFRESH_IN_LAST_X_SECONDS {
+            return Err(InternalError::ReadTokenAsRefreshToken(
+                ReadTokenAsRefreshTokenError::NotUsedWithinValidRefreshPeriod,
+            )
+            .into());
+        }
+        let (user_id, mut token_mode) = user_token.extract();
+        let expiry: DateTime<Utc>;
+        if let TokenMode::Read(read_mode) = &mut token_mode {
+            expiry = read_mode.upgrade(
+                &filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
+                    .hash_debug(),
+            )?;
+        } else {
+            return Err(InternalError::ReadTokenAsRefreshToken(
+                ReadTokenAsRefreshTokenError::NotReadToken,
+            )
+            .into());
+        };
+
+        let user_token: UserToken = UserToken::new(token_mode, user_id);
+
+        self.create_signed_and_encrypted_token_with_expiry(user_token, expiry)
+
+        //TODO: Add requirement for minimum number of expected headers to be present to prevent clients sending minimal headers
+        /* self.generate_read_token(headers, user_id) */
     }
 
     pub fn verify_flow<T: Serialize + DeserializeOwned>(
         &self,
         token: &String,
         headers: &HeaderMap,
-    ) -> Result<T, Error> {
-        let (flow, expiry): (Flow<T>, DateTime<Utc>) = Token::verify_and_decrypt::<Flow<T>>(
-            &token,
-            self.encryption_keys.get_public_signing_key(),
-            self.encryption_keys.get_symmetric_key(),
-            self.encryption_keys.get_iv(),
-        )?;
+    ) -> Result<(T, DateTime<Utc>), Error> {
+        let (flow, expiry): (Flow<T>, DateTime<Utc>) = self.verify_and_decrypt::<Flow<T>>(token)?;
         let headers: std::collections::BTreeMap<String, HeaderValue> =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
 
@@ -259,7 +304,7 @@ impl AuthManager {
         if &key != flow.get_header_key() {
             return Err(InternalError::Login(LoginError::HeaderKeysDontMatch).into());
         }
-        Ok(flow.data)
+        Ok((flow.data, expiry))
     }
 
     pub fn get_user_id_from_email(&self, email: &EmailAddress) -> Option<Uuid> {
@@ -276,6 +321,32 @@ impl AuthManager {
         }
     }
 
+    pub fn create_signed_and_encrypted_token_with_lifetime<T: Serialize + DeserializeOwned>(
+        &self,
+        data: T,
+        lifetime: Duration,
+    ) -> Result<TokenPair, Error> {
+        let expiry = Utc::now() + lifetime;
+        self.create_signed_and_encrypted_token_with_expiry(data, expiry)
+    }
+
+    pub fn create_signed_and_encrypted_token_with_expiry<T: Serialize + DeserializeOwned>(
+        &self,
+        data: T,
+        expiry: DateTime<Utc>,
+    ) -> Result<TokenPair, Error> {
+        Ok(TokenPair {
+            token: Token::create_signed_and_encrypted(
+                data,
+                expiry,
+                self.encryption_keys.get_private_signing_key(),
+                self.encryption_keys.get_symmetric_key(),
+                self.encryption_keys.get_iv(),
+            )?,
+            expiry,
+        })
+    }
+
     pub fn invite_user(&self, email: EmailAddress) -> Result<Uuid, Error> {
         let user_id: Uuid = self.generate_user_uid();
         let user: User = User::new(
@@ -285,20 +356,20 @@ impl AuthManager {
             String::new(),
             String::new(),
         );
-        let invite_token: String = Token::create_signed_and_encrypted(
+        let token_pair = self.create_signed_and_encrypted_token_with_lifetime(
             UserInvite::new(email.to_owned(), user_id),
-            Utc::now() + Duration::minutes(600),
-            self.encryption_keys.get_private_signing_key(),
-            self.encryption_keys.get_symmetric_key(),
-            self.encryption_keys.get_iv(),
+            Duration::minutes(600),
         )?;
         let _ = self.users.write().insert(user_id, user);
         self.email_to_id_registry.write().insert(email, user_id);
-        println!("{}", invite_token);
+        println!("{}", token_pair.token);
         self.smtp_manager.send_email_to_recipient(
             "alexinicolaspeck@gmail.com".into(),
             "Invite Link".into(),
-            format!("http://dev.clouduam.com:81/invite?token={invite_token}"), //https://clouduam.com
+            format!(
+                "http://dev.clouduam.com:81/invite?token={}",
+                token_pair.token
+            ), //https://clouduam.com
         )?;
         Ok(user_id)
     }

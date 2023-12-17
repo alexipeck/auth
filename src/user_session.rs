@@ -1,55 +1,50 @@
-use crate::{error::Error, token::Token};
+use crate::{
+    auth_manager::AuthManager,
+    error::{Error, InternalError, ReadTokenAsRefreshTokenError},
+    serde::datetime_utc,
+    MAX_READ_ITERATIONS, READ_LIFETIME_SECONDS, WRITE_LIFETIME_SECONDS,
+};
+use axum::http::HeaderMap;
 use chrono::{DateTime, Duration, Utc};
-use core::fmt;
-use openssl::pkey::{PKey, Private};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tracing::debug;
 use uuid::Uuid;
 
 /// Client representation of their session, with read and write being their tokenised rights for read and write at any given time,
 /// each with their own expiry with writes having much shorter expiry and requiring periodic upgrade using 2FA code to perform write actions
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TokenPair {
+    pub token: String,
+    #[serde(with = "datetime_utc")]
+    pub expiry: DateTime<Utc>,
+}
+
 #[derive(Debug, Serialize /* Deserialize */)]
 pub struct UserSession {
-    read_token: String,
-    read_expiry: DateTime<Utc>,
-    write_token: String,
-    write_expiry: DateTime<Utc>,
+    read: TokenPair,
+    write: TokenPair,
 }
 
 impl UserSession {
     pub fn create_from_user_id(
         user_id: Uuid,
-        private_key: &PKey<Private>,
-        symmetric_key: &[u8],
-        iv: &[u8],
+        headers: HeaderMap,
+        auth_manager: Arc<AuthManager>,
     ) -> Result<Self, Error> {
-        let read_expiry: DateTime<Utc> = Utc::now() + Duration::minutes(30);
-        let write_expiry: DateTime<Utc> = Utc::now() + Duration::minutes(5);
-        let read_token: String = Token::create_signed_and_encrypted(
-            UserAccessToken::new(AccessLevel::Read, user_id),
-            read_expiry.to_owned(),
-            private_key,
-            symmetric_key,
-            iv,
+        let read: TokenPair = auth_manager.generate_read_token(&headers, user_id)?;
+        let write: TokenPair = auth_manager.create_signed_and_encrypted_token_with_lifetime(
+            UserToken::new(TokenMode::Write, user_id),
+            Duration::seconds(WRITE_LIFETIME_SECONDS),
         )?;
-        let write_token: String = Token::create_signed_and_encrypted(
-            UserAccessToken::new(AccessLevel::Write, user_id),
-            write_expiry.to_owned(),
-            private_key,
-            symmetric_key,
-            iv,
-        )?;
-        Ok(Self {
-            read_token,
-            read_expiry,
-            write_token,
-            write_expiry,
-        })
+        Ok(Self { read, write })
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+/* #[derive(Debug, Serialize, Deserialize)]
 pub enum AccessLevel {
-    Read,
+    Read(String),
     Write,
 }
 
@@ -59,33 +54,87 @@ impl fmt::Display for AccessLevel {
             f,
             "{}",
             match self {
-                Self::Read => "Read",
+                Self::Read(_) => "Read",
                 Self::Write => "Write",
             }
         )
     }
+} */
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReadMode {
+    headers_hash: String,
+    iteration: u32,
+    session_start: DateTime<Utc>,
+    iteration_limit: u32,
+    latest_expiry: DateTime<Utc>,
+}
+
+impl ReadMode {
+    pub fn new(headers_hash: String, max_lifetime: Duration) -> Self {
+        let session_start: DateTime<Utc> = Utc::now();
+        Self {
+            headers_hash,
+            iteration: 0,
+            session_start,
+            iteration_limit: MAX_READ_ITERATIONS,
+            latest_expiry: session_start + max_lifetime,
+        }
+    }
+    pub fn upgrade(&mut self, headers_hash: &String) -> Result<DateTime<Utc>, Error> {
+        if &self.headers_hash != headers_hash {
+            return Err(InternalError::ReadTokenAsRefreshToken(
+                ReadTokenAsRefreshTokenError::InvalidHeaders,
+            )
+            .into());
+        }
+        self.iteration += 1;
+        if self.iteration >= self.iteration_limit {
+            return Err(InternalError::ReadTokenAsRefreshToken(
+                ReadTokenAsRefreshTokenError::HasHitIterationLimit,
+            )
+            .into());
+        }
+        let expiry: DateTime<Utc> = {
+            let proposed_expiry: DateTime<Utc> =
+                Utc::now() + Duration::seconds(READ_LIFETIME_SECONDS);
+            if proposed_expiry > self.latest_expiry {
+                debug!("Read token expiry truncated to latest_expiry");
+                self.latest_expiry
+            } else {
+                proposed_expiry
+            }
+        };
+        Ok(expiry)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct UserAccessToken {
-    access_level: AccessLevel,
+pub enum TokenMode {
+    Read(Box<ReadMode>),
+    Write,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserToken {
     user_id: Uuid,
+    token_mode: TokenMode,
     _salt: Uuid,
     __salt: Uuid,
 }
 
-impl UserAccessToken {
-    pub fn new(access_level: AccessLevel, user_id: Uuid) -> Self {
+impl UserToken {
+    pub fn new(token_mode: TokenMode, user_id: Uuid) -> Self {
         Self {
-            access_level,
             user_id,
+            token_mode,
             _salt: Uuid::new_v4(),
             __salt: Uuid::new_v4(),
         }
     }
 
-    pub fn get_access_level(&self) -> &AccessLevel {
-        &self.access_level
+    pub fn extract(self) -> (Uuid, TokenMode) {
+        (self.user_id, self.token_mode)
     }
 
     pub fn get_user_id(&self) -> &Uuid {

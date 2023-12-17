@@ -2,6 +2,7 @@ use crate::{
     flows::{user_login::LoginFlow, user_setup::UserSetupFlow},
     serde::datetime_utc,
     user::ClientState,
+    user_session::TokenPair,
 };
 use axum::{
     body::Body,
@@ -47,6 +48,8 @@ pub enum ResponseData {
     UserAuthenticated(UserAuthenticated),
     ClientState(ClientState),
     InitSetupFlow(UserSetupFlow),
+    NewReadToken(TokenPair),
+    NewWriteToken(TokenPair),
     SetupComplete,
     CredentialsRejected,
     InternalServerError,
@@ -86,6 +89,8 @@ impl IntoResponse for FullResponseData {
             | ResponseData::UserAuthenticated(_)
             | ResponseData::ClientState(_)
             | ResponseData::InitSetupFlow(_)
+            | ResponseData::NewReadToken(_)
+            | ResponseData::NewWriteToken(_)
             | ResponseData::SetupComplete => StatusCode::OK,
             ResponseData::CredentialsRejected | ResponseData::Unauthorised => {
                 StatusCode::UNAUTHORIZED

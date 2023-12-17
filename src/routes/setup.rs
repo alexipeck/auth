@@ -3,23 +3,25 @@ use crate::{
     cryptography::decrypt_url_safe_base64_with_private_key,
     error::{AccountSetupError, Error, InternalError},
     flows::user_setup::{
-        InviteToken, SetupCredentials, UserInviteInstance, UserSetup, UserSetupFlow,
+        InviteToken, SetupCredentials, UserInvite, UserInviteInstance, UserSetup, UserSetupFlow,
     },
+    r#trait::Expired,
     response::{FullResponseData, ResponseData},
+    user_session::TokenPair,
 };
 use axum::{extract::ConnectInfo, http::HeaderMap, response::IntoResponse, Extension};
-use chrono::Duration;
+use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use google_authenticator::GoogleAuthenticator;
 use std::{net::SocketAddr, sync::Arc};
 
 fn validate_invite_token(
-    invite_token: String,
+    invite_token: &String,
     headers: &HeaderMap,
     auth_manager: Arc<AuthManager>,
 ) -> Result<UserSetupFlow, Error> {
     let (user_invite_instance, expiry) = {
-        let (user_invite, expiry) = auth_manager.validate_invite_token(invite_token)?;
+        let (user_invite, expiry) = auth_manager.verify_and_decrypt::<UserInvite>(invite_token)?;
         let user_setup_incomplete: Option<bool> =
             auth_manager.user_setup_incomplete(user_invite.get_user_id());
         if user_setup_incomplete.is_none() {
@@ -34,19 +36,29 @@ fn validate_invite_token(
     let email: EmailAddress = user_invite_instance.get_email().to_owned();
     let two_fa_client_secret: String = user_invite_instance.get_two_fa_client_secret().to_owned();
     //TODO: Check expiry, if less than 5 minutes, make it the setup flow duration
-    let (token, expiry) = auth_manager.setup_flow(
-        headers,
-        FlowType::Setup,
-        Duration::minutes(5),
-        user_invite_instance,
-    )?;
+    let token_pair: TokenPair;
+    if (expiry + Duration::minutes(5)).expired() {
+        token_pair = auth_manager.setup_flow_with_expiry(
+            headers,
+            FlowType::Setup,
+            expiry,
+            user_invite_instance,
+        )?;
+    } else {
+        token_pair = auth_manager.setup_flow_with_lifetime(
+            headers,
+            FlowType::Setup,
+            Duration::minutes(5),
+            user_invite_instance,
+        )?;
+    };
+
     let public_encryption_key = auth_manager
         .encryption_keys
         .get_public_encryption_key_string()?;
     Ok(UserSetupFlow::new(
-        token,
+        token_pair,
         email,
-        expiry,
         two_fa_client_secret,
         public_encryption_key,
     ))
@@ -61,7 +73,7 @@ pub async fn validate_invite_token_route(
     println!("{:?}", addr);
     //println!("{:?}", headers);
     /* println!("{:?}", cookie); */
-    match validate_invite_token(invite_token.token, &headers, auth_manager) {
+    match validate_invite_token(&invite_token.token, &headers, auth_manager) {
         Ok(user_setup_flow) => {
             FullResponseData::basic(ResponseData::InitSetupFlow(user_setup_flow)).into_response()
         }
@@ -77,7 +89,7 @@ fn setup_user_account(
     headers: &HeaderMap,
     auth_manager: Arc<AuthManager>,
 ) -> Result<(), Error> {
-    let user_invite_instance: UserInviteInstance =
+    let (user_invite_instance, _): (UserInviteInstance, DateTime<Utc>) =
         auth_manager.verify_flow::<UserInviteInstance>(&user_setup.key, headers)?;
     let user_setup_incomplete: Option<bool> =
         auth_manager.user_setup_incomplete(user_invite_instance.get_user_id());
