@@ -8,10 +8,13 @@ pub mod auth_server;
 #[path = "./routes/base.rs"]
 pub mod base;
 pub mod cryptography;
+pub mod database;
 pub mod error;
 pub mod flows;
+pub mod model;
 pub mod response;
 pub mod routes;
+pub mod schema;
 pub mod serde;
 pub mod smtp_manager;
 pub mod token;

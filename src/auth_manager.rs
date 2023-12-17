@@ -1,5 +1,6 @@
 use crate::{
     cryptography::EncryptionKeys,
+    database::{establish_connection, get_all_users, save_user, update_user},
     error::{
         AccountSetupError, AuthenticationError, Error, InternalError, LoginError,
         ReadTokenAsRefreshTokenError, StartupError,
@@ -141,6 +142,7 @@ pub struct AuthManager {
     pub config: Config,
     pub encryption_keys: EncryptionKeys,
     pub smtp_manager: SmtpManager,
+    pub database_url: String,
 }
 
 impl AuthManager {
@@ -151,6 +153,7 @@ impl AuthManager {
         smtp_sender_address: String,
         smtp_username: String,
         smtp_password: String,
+        database_url: String,
     ) -> Result<Self, Error> {
         let allowed_origin: HeaderValue = match allowed_origin.parse() {
             Ok(allowed_origin) => allowed_origin,
@@ -160,8 +163,9 @@ impl AuthManager {
         };
         let email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>> =
             Arc::new(RwLock::new(HashMap::new()));
-        let users: Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, HashMap<_, _>>> =
-            Arc::new(RwLock::new(HashMap::new()));
+        let users: Arc<RwLock<HashMap<Uuid, User>>> = Arc::new(RwLock::new(get_all_users(
+            &mut establish_connection(&database_url),
+        )?));
         let encryption_keys: EncryptionKeys = EncryptionKeys::new()?;
         let smtp_manager: SmtpManager = SmtpManager::new(
             smtp_server,
@@ -176,6 +180,7 @@ impl AuthManager {
             config: Config::new(cookie_name, allowed_origin),
             encryption_keys,
             smtp_manager,
+            database_url,
         })
     }
 }
@@ -360,6 +365,9 @@ impl AuthManager {
             UserInvite::new(email.to_owned(), user_id),
             Duration::minutes(600),
         )?;
+        if let Err(err) = save_user(&mut establish_connection(&self.database_url), &user) {
+            panic!("{}", err);
+        }
         let _ = self.users.write().insert(user_id, user);
         self.email_to_id_registry.write().insert(email, user_id);
         println!("{}", token_pair.token);
@@ -391,7 +399,11 @@ impl AuthManager {
             }
         };
         return if let Some(user) = self.users.write().get_mut(&user_id) {
-            user.setup_user(password, display_name, two_fa_client_secret)
+            user.setup_user(password, display_name, two_fa_client_secret)?;
+            if let Err(err) = update_user(&mut establish_connection(&self.database_url), user) {
+                panic!("{}", err);
+            }
+            Ok(())
         } else {
             Err(InternalError::AccountSetup(AccountSetupError::UserNotFound(user_id)).into())
         };

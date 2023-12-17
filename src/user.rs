@@ -5,6 +5,7 @@ use uuid::Uuid;
 use crate::{
     cryptography::generate_token,
     error::{AccountSetupError, Error, InternalError},
+    model::UserModel,
     user_session::UserSession,
 };
 
@@ -34,6 +35,15 @@ impl User {
             hashed_and_salted_password,
             two_fa_client_secret,
         }
+    }
+    pub fn to_model(&self) -> UserModel {
+        UserModel::new(
+            self.id.to_string(),
+            self.display_name.to_owned(),
+            self.email.to_string(),
+            self.hashed_and_salted_password.to_owned(),
+            self.two_fa_client_secret.to_owned(),
+        )
     }
     pub fn incomplete(&self) -> bool {
         self.display_name.is_empty()

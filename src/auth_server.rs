@@ -57,6 +57,7 @@ pub enum RequiredProperties {
     SMTPSenderAddress,
     SMTPUsername,
     SMTPPassword,
+    DatabaseUrl,
 }
 
 impl fmt::Display for RequiredProperties {
@@ -71,6 +72,7 @@ impl fmt::Display for RequiredProperties {
                 Self::SMTPSenderAddress => "SMTPSenderAddress",
                 Self::SMTPUsername => "SMTPUsername",
                 Self::SMTPPassword => "SMTPPassword",
+                Self::DatabaseUrl => "DatabaseUrl",
             }
         )
     }
@@ -136,7 +138,7 @@ pub struct Builder {
     //optional
     stop: Option<Arc<AtomicBool>>,
     stop_notify: Option<Arc<Notify>>,
-    database_path: Option<String>,
+    database_url: Option<String>,
 }
 
 impl Builder {
@@ -180,30 +182,33 @@ impl Builder {
         self
     }
 
-    pub fn database_path(mut self, database_path: String) -> Self {
-        self.database_path = Some(database_path);
+    pub fn database_url(mut self, database_url: String) -> Self {
+        self.database_url = Some(database_url);
         self
     }
 
     pub async fn start_server(self) -> Result<Arc<AuthServer>, Error> {
         let mut missing_properties: Vec<RequiredProperties> = Vec::new();
         if self.cookie_name.is_none() {
-            missing_properties.push(RequiredProperties::CookieName)
+            missing_properties.push(RequiredProperties::CookieName);
         }
         if self.allowed_origin.is_none() {
-            missing_properties.push(RequiredProperties::AllowedOrigin)
+            missing_properties.push(RequiredProperties::AllowedOrigin);
         }
         if self.smtp_server.is_none() {
-            missing_properties.push(RequiredProperties::SMTPServer)
+            missing_properties.push(RequiredProperties::SMTPServer);
         }
         if self.smtp_sender_address.is_none() {
-            missing_properties.push(RequiredProperties::SMTPSenderAddress)
+            missing_properties.push(RequiredProperties::SMTPSenderAddress);
         }
         if self.smtp_username.is_none() {
-            missing_properties.push(RequiredProperties::SMTPUsername)
+            missing_properties.push(RequiredProperties::SMTPUsername);
         }
         if self.smtp_password.is_none() {
-            missing_properties.push(RequiredProperties::SMTPPassword)
+            missing_properties.push(RequiredProperties::SMTPPassword);
+        }
+        if self.database_url.is_none() {
+            missing_properties.push(RequiredProperties::DatabaseUrl);
         }
         if !missing_properties.is_empty() {
             return Err(
@@ -221,6 +226,7 @@ impl Builder {
             self.smtp_sender_address.unwrap(),
             self.smtp_username.unwrap(),
             self.smtp_password.unwrap(),
+            self.database_url.unwrap(),
         )?;
         let signals = Signals {
             stop: self.stop.unwrap_or(Arc::new(AtomicBool::new(false))),

@@ -1,12 +1,23 @@
-use std::fmt;
-
 use axum::http::header::InvalidHeaderValue;
 use email_address::EmailAddress;
 use google_authenticator::GAError;
+use std::fmt;
 use thiserror::Error;
 use uuid::Uuid;
 
 use crate::impl_error_wrapper;
+
+impl_error_wrapper!(SerdeError, serde_json::error::Error);
+impl_error_wrapper!(OpenSSLError, openssl::error::ErrorStack);
+impl_error_wrapper!(Base64DecodeError, base64::DecodeError);
+impl_error_wrapper!(FromUtf8Error, std::string::FromUtf8Error);
+impl_error_wrapper!(Utf8Error, core::str::Utf8Error);
+impl_error_wrapper!(SmtpAddressError, lettre::address::AddressError);
+impl_error_wrapper!(SmtpTransportError, lettre::transport::smtp::Error);
+impl_error_wrapper!(LettreError, lettre::error::Error);
+impl_error_wrapper!(UuidError, uuid::Error);
+impl_error_wrapper!(DieselResultError, diesel::result::Error);
+//impl_error_wrapper!(EmailAddressError, email_address::EmailAddress);
 
 #[derive(Error, Debug)]
 pub enum AuthFlowError {
@@ -47,14 +58,6 @@ pub enum AuthenticationError {
     #[error("EmailAlreadyExists({0})")]
     EmailAlreadyExists(EmailAddress), */
 }
-impl_error_wrapper!(SerdeError, serde_json::error::Error);
-impl_error_wrapper!(OpenSSLError, openssl::error::ErrorStack);
-impl_error_wrapper!(Base64DecodeError, base64::DecodeError);
-impl_error_wrapper!(FromUtf8Error, std::string::FromUtf8Error);
-impl_error_wrapper!(Utf8Error, core::str::Utf8Error);
-impl_error_wrapper!(SmtpAddressError, lettre::address::AddressError);
-impl_error_wrapper!(SmtpTransportError, lettre::transport::smtp::Error);
-impl_error_wrapper!(LettreError, lettre::error::Error);
 
 #[derive(Error, Debug)]
 pub enum TokenError {
@@ -199,6 +202,24 @@ pub enum AuthServerBuildError {
 }
 
 #[derive(Error, Debug)]
+pub enum UserFromModelError {
+    #[error("ParseUuidFromString({0})")]
+    ParseUuidFromString(UuidError),
+    #[error("ParseEmailAddressFromString({0})")]
+    ParseEmailAddressFromString(String), //can't use proper error translation for email_address::Error as it doesn't satisfy AsDynError<'_> and StdError
+}
+
+#[derive(Error, Debug)]
+pub enum DatabaseError {
+    #[error("DatabaseInsertUser{0})")]
+    DatabaseInsertUser(DieselResultError),
+    #[error("DatabaseUpdateUser{0})")]
+    DatabaseUpdateUser(DieselResultError),
+    #[error("LoadingUserModelsFromDatabase{0})")]
+    LoadingUserModelsFromDatabase(DieselResultError),
+}
+
+#[derive(Error, Debug)]
 pub enum InternalError {
     #[error("AuthFlow({0})")]
     AuthFlow(#[from] AuthFlowError),
@@ -222,6 +243,10 @@ pub enum InternalError {
     AuthServerBuild(AuthServerBuildError),
     #[error("ReadTokenAsRefreshToken({0})")]
     ReadTokenAsRefreshToken(ReadTokenAsRefreshTokenError),
+    #[error("UserFromModel({0})")]
+    UserFromModel(UserFromModelError),
+    #[error("Database({0})")]
+    Database(DatabaseError),
 }
 
 #[derive(Error, Debug)]
