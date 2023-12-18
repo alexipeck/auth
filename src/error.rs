@@ -220,6 +220,14 @@ pub enum DatabaseError {
 }
 
 #[derive(Error, Debug)]
+pub enum ReadTokenValidationError {
+    #[error("InvalidHeaders")]
+    InvalidHeaders,
+    #[error("NotReadToken")]
+    NotReadToken,
+}
+
+#[derive(Error, Debug)]
 pub enum InternalError {
     #[error("AuthFlow({0})")]
     AuthFlow(#[from] AuthFlowError),
@@ -241,6 +249,8 @@ pub enum InternalError {
     Smtp(SmtpError),
     #[error("AuthServerBuild({0})")]
     AuthServerBuild(AuthServerBuildError),
+    #[error("ReadTokenValidation({0})")]
+    ReadTokenValidation(ReadTokenValidationError),
     #[error("ReadTokenAsRefreshToken({0})")]
     ReadTokenAsRefreshToken(ReadTokenAsRefreshTokenError),
     #[error("UserFromModel({0})")]

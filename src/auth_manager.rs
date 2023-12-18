@@ -3,7 +3,7 @@ use crate::{
     database::{establish_connection, get_all_users, save_user, update_user},
     error::{
         AccountSetupError, AuthenticationError, Error, InternalError, LoginError,
-        ReadTokenAsRefreshTokenError, StartupError,
+        ReadTokenAsRefreshTokenError, StartupError, ReadTokenValidationError,
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
@@ -409,6 +409,19 @@ impl AuthManager {
         };
     }
 
+    pub fn validate_read_token(&self, token: &String, headers: &HeaderMap) -> Result<Uuid, Error> {
+        let (user_token, _) = self.verify_and_decrypt::<UserToken>(token)?;
+        let (user_id, token_mode) = user_token.extract();
+        if let TokenMode::Read(read_mode) = token_mode {
+            if read_mode.get_headers_hash() != &filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile).hash_debug() {
+                return Err(InternalError::ReadTokenValidation(ReadTokenValidationError::InvalidHeaders).into())
+            }
+        } else {
+            return Err(InternalError::ReadTokenValidation(ReadTokenValidationError::NotReadToken).into())
+        }
+        Ok(user_id)
+    }
+
     pub fn validate_user_credentials(
         &self,
         email: &EmailAddress,
@@ -473,12 +486,4 @@ impl AuthManager {
             ),
         }
     }
-
-    /* fn validate_auth_level_1(&self, ) -> Result<()/* Option<User> */, Error> {
-
-    } */
-
-    /* fn validate_auth_level_2(&self, cookie_token: String, header_token: String, two_fa_code: [u8; 6]) -> Result<()/* Option<User> */, Error> {
-
-    } */
 }

@@ -107,6 +107,10 @@ impl ReadMode {
         };
         Ok(expiry)
     }
+
+    pub fn get_headers_hash(&self) -> &String {
+        &self.headers_hash
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
