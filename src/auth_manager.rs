@@ -341,7 +341,7 @@ impl AuthManager {
         expiry: DateTime<Utc>,
     ) -> Result<TokenPair, Error> {
         Ok(TokenPair {
-            token: Token::create_signed_and_encrypted(
+            token: Token::create_signed_and_encrypted_expiry(
                 data,
                 expiry,
                 self.encryption_keys.get_private_signing_key(),
