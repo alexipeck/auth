@@ -3,7 +3,7 @@ use crate::{
     database::{establish_connection, get_all_users, save_user, update_user},
     error::{
         AccountSetupError, AuthenticationError, Error, InternalError, LoginError,
-        ReadTokenAsRefreshTokenError, StartupError, ReadTokenValidationError,
+        ReadTokenAsRefreshTokenError, ReadTokenValidationError, StartupError,
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
@@ -220,7 +220,7 @@ impl AuthManager {
 
     pub fn verify_and_decrypt<T: Serialize + DeserializeOwned>(
         &self,
-        token: &String,
+        token: &str,
     ) -> Result<(T, DateTime<Utc>), Error> {
         Token::verify_and_decrypt::<T>(
             token,
@@ -409,15 +409,23 @@ impl AuthManager {
         };
     }
 
-    pub fn validate_read_token(&self, token: &String, headers: &HeaderMap) -> Result<Uuid, Error> {
+    pub fn validate_read_token(&self, token: &str, headers: &HeaderMap) -> Result<Uuid, Error> {
         let (user_token, _) = self.verify_and_decrypt::<UserToken>(token)?;
         let (user_id, token_mode) = user_token.extract();
         if let TokenMode::Read(read_mode) = token_mode {
-            if read_mode.get_headers_hash() != &filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile).hash_debug() {
-                return Err(InternalError::ReadTokenValidation(ReadTokenValidationError::InvalidHeaders).into())
+            if read_mode.get_headers_hash()
+                != &filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
+                    .hash_debug()
+            {
+                return Err(InternalError::ReadTokenValidation(
+                    ReadTokenValidationError::InvalidHeaders,
+                )
+                .into());
             }
         } else {
-            return Err(InternalError::ReadTokenValidation(ReadTokenValidationError::NotReadToken).into())
+            return Err(
+                InternalError::ReadTokenValidation(ReadTokenValidationError::NotReadToken).into(),
+            );
         }
         Ok(user_id)
     }

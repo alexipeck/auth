@@ -9,7 +9,7 @@ use crate::{
     r#trait::Expired,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use chrono::{DateTime, Utc, Duration};
+use chrono::{DateTime, Duration, Utc};
 use openssl::{
     hash::MessageDigest,
     pkey::{PKey, Private, Public},
@@ -148,7 +148,13 @@ impl Token {
         iv: &[u8],
     ) -> Result<String, Error> {
         let expiry: DateTime<Utc> = Utc::now() + lifetime;
-        Self::create_signed_and_encrypted_expiry(data, expiry, private_signing_key, symmetric_key, iv)
+        Self::create_signed_and_encrypted_expiry(
+            data,
+            expiry,
+            private_signing_key,
+            symmetric_key,
+            iv,
+        )
     }
     pub fn create_signed_and_encrypted_expiry<T: Serialize + DeserializeOwned>(
         data: T,
@@ -238,7 +244,7 @@ impl Token {
     }
 
     pub fn verify_and_decrypt<T: Serialize + DeserializeOwned>(
-        token: &String,
+        token: &str,
         public_signing_key: &PKey<Public>,
         symmetric_key: &[u8],
         iv: &[u8],
