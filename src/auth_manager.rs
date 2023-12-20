@@ -251,7 +251,7 @@ impl AuthManager {
         self.create_signed_and_encrypted_token_with_lifetime(
             UserToken::new(
                 TokenMode::Read(Box::new(ReadMode::new(
-                    filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile)
+                    filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
                         .hash_debug(),
                     Duration::seconds(MAX_SESSION_LIFETIME_SECONDS),
                 ))),
