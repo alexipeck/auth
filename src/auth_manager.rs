@@ -34,7 +34,7 @@ impl Default for Regexes {
         let mut keys = vec![
             "host",
             "user-agent",
-            "x-forwarded-host",
+            /* "x-forwarded-host", */
             "x-forwarded-proto",
             "x-forwarded-port",
             "referer",
