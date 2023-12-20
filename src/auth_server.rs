@@ -101,7 +101,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
         .route("/setup/credentials", post(setup_user_account_route))
         .route(
             "/authenticated/refresh-read-token",
-            post(refresh_read_token_route),
+            get(refresh_read_token_route),
         )
         /* .route(
             "/authenticated/twofa-for-write-token",
