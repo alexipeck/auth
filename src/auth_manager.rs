@@ -163,11 +163,12 @@ impl AuthManager {
                 return Err(InternalError::Startup(StartupError::InvalidOrigin(err.into())).into())
             }
         };
-        let email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>> =
-            Arc::new(RwLock::new(HashMap::new()));
-        let users: Arc<RwLock<HashMap<Uuid, User>>> = Arc::new(RwLock::new(get_all_users(
+        let users = get_all_users(
             &mut establish_connection(&database_url),
-        )?));
+        )?;
+        let email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>> =
+            Arc::new(RwLock::new(users.iter().map(|(user_id, user)| (user.get_email().to_owned(), *user_id)).collect::<HashMap<EmailAddress, Uuid>>()));
+        let users: Arc<RwLock<HashMap<Uuid, User>>> = Arc::new(RwLock::new(users));
         let encryption_keys: EncryptionKeys = EncryptionKeys::new()?;
         let smtp_manager: SmtpManager = SmtpManager::new(
             smtp_server,
