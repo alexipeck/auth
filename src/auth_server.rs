@@ -57,6 +57,7 @@ pub enum RequiredProperties {
     SMTPUsername,
     SMTPPassword,
     DatabaseUrl,
+    Port,
 }
 
 impl fmt::Display for RequiredProperties {
@@ -72,6 +73,7 @@ impl fmt::Display for RequiredProperties {
                 Self::SMTPUsername => "SMTPUsername",
                 Self::SMTPPassword => "SMTPPassword",
                 Self::DatabaseUrl => "DatabaseUrl",
+                Self::Port => "Port",
             }
         )
     }
@@ -110,7 +112,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
         .layer(cors)
         .layer(Extension(auth_server.auth_manager.to_owned()));
 
-    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 8886));
+    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], auth_server.auth_manager.port));
     let listener = TcpListener::bind(addr).await.unwrap();
     info!("REST endpoint listening on {}", addr);
 
@@ -133,6 +135,7 @@ pub struct Builder {
     smtp_sender_address: Option<String>,
     smtp_username: Option<String>,
     smtp_password: Option<String>,
+    port: Option<u16>,
 
     //optional
     stop: Option<Arc<AtomicBool>>,
@@ -186,6 +189,11 @@ impl Builder {
         self
     }
 
+    pub fn serve_on_port(mut self, port: u16) -> Self {
+        self.port = Some(port);
+        self
+    }
+
     pub async fn start_server(self) -> Result<Arc<AuthServer>, Error> {
         let mut missing_properties: Vec<RequiredProperties> = Vec::new();
         if self.cookie_name.is_none() {
@@ -209,6 +217,9 @@ impl Builder {
         if self.database_url.is_none() {
             missing_properties.push(RequiredProperties::DatabaseUrl);
         }
+        if self.port.is_none() {
+            missing_properties.push(RequiredProperties::Port);
+        }
         if !missing_properties.is_empty() {
             return Err(
                 InternalError::AuthServerBuild(AuthServerBuildError::MissingProperties(format!(
@@ -226,6 +237,7 @@ impl Builder {
             self.smtp_username.unwrap(),
             self.smtp_password.unwrap(),
             self.database_url.unwrap(),
+            self.port.unwrap(),
         )?;
         let signals = Signals {
             stop: self.stop.unwrap_or(Arc::new(AtomicBool::new(false))),

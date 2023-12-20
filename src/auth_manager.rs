@@ -143,6 +143,7 @@ pub struct AuthManager {
     pub encryption_keys: EncryptionKeys,
     pub smtp_manager: SmtpManager,
     pub database_url: String,
+    pub port: u16,
 }
 
 impl AuthManager {
@@ -154,6 +155,7 @@ impl AuthManager {
         smtp_username: String,
         smtp_password: String,
         database_url: String,
+        port: u16,
     ) -> Result<Self, Error> {
         let allowed_origin: HeaderValue = match allowed_origin.parse() {
             Ok(allowed_origin) => allowed_origin,
@@ -181,6 +183,7 @@ impl AuthManager {
             encryption_keys,
             smtp_manager,
             database_url,
+            port,
         })
     }
 }
