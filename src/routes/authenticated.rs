@@ -1,8 +1,10 @@
-use crate::{
-    auth_manager::AuthManager,
-    response::{FullResponseData, ResponseData},
+use crate::auth_manager::AuthManager;
+use axum::{
+    extract::ConnectInfo,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    Extension, Json,
 };
-use axum::{extract::ConnectInfo, http::HeaderMap, response::IntoResponse, Extension};
 use serde::Deserialize;
 use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
@@ -19,13 +21,11 @@ pub async fn refresh_read_token_route(
     axum::response::Json(wrapped_token): axum::response::Json<WrappedToken>,
 ) -> impl IntoResponse {
     match auth_manager.refresh_read_token(&wrapped_token.token, &headers) {
-        Ok(token_pair) => {
-            FullResponseData::basic(ResponseData::NewReadToken(token_pair)).into_response()
-        }
+        Ok(token_pair) => (StatusCode::OK, Json(token_pair)).into_response(),
         Err(err) => {
-            warn!("{}", err);
-            FullResponseData::basic(ResponseData::Unauthorised).into_response()
             //TODO: Split out into actual correct errors
+            warn!("{}", err);
+            StatusCode::UNAUTHORIZED.into_response()
         }
     }
 }
