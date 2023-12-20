@@ -10,7 +10,7 @@ use crate::{
 use axum::{extract::ConnectInfo, http::HeaderMap, response::IntoResponse, Extension};
 use chrono::Duration;
 use std::{net::SocketAddr, sync::Arc};
-use tracing::{warn, info};
+use tracing::{info, warn};
 
 fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result<LoginFlow, Error> {
     let token_pair: TokenPair = auth_manager.setup_flow_with_lifetime::<Option<bool>>(
@@ -69,7 +69,7 @@ fn login_with_credentials(
 }
 
 pub async fn login_with_credentials_route(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
     axum::response::Json(user_login): axum::response::Json<UserLogin>,

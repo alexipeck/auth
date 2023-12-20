@@ -1,24 +1,3 @@
-use core::fmt;
-use std::{
-    net::SocketAddr,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-};
-
-use axum::{
-    http::{
-        header::{AUTHORIZATION, CONTENT_TYPE, COOKIE},
-        Method,
-    },
-    routing::{get, post},
-    Extension, Router,
-};
-use tokio::{net::TcpListener, sync::Notify};
-use tower_http::cors::{AllowOrigin, CorsLayer};
-use tracing::{info, error};
-
 use crate::{
     auth_manager::AuthManager,
     base::debug_route,
@@ -29,6 +8,25 @@ use crate::{
         setup::{setup_user_account_route, validate_invite_token_route},
     },
 };
+use axum::{
+    http::{
+        header::{AUTHORIZATION, CONTENT_TYPE, COOKIE},
+        Method,
+    },
+    routing::{get, post},
+    Extension, Router,
+};
+use core::fmt;
+use std::{
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
+use tokio::{net::TcpListener, sync::Notify};
+use tower_http::cors::{AllowOrigin, CorsLayer};
+use tracing::info;
 
 pub struct Signals {
     pub stop: Arc<AtomicBool>,

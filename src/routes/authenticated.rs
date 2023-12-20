@@ -13,7 +13,7 @@ pub struct WrappedToken {
 }
 
 pub async fn refresh_read_token_route(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
     axum::response::Json(wrapped_token): axum::response::Json<WrappedToken>,

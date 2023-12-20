@@ -153,10 +153,8 @@ impl EncryptionKeys {
         match from_utf8(&public_pem_bytes) {
             Ok(public_pem_str) => Ok(public_pem_str.to_string()),
             Err(err) => Err(
-                InternalError::Encryption(EncryptionError::PublicPEMBytesToString(Utf8Error(
-                    err,
-                )))
-                .into(),
+                InternalError::Encryption(EncryptionError::PublicPEMBytesToString(Utf8Error(err)))
+                    .into(),
             ),
         }
     }

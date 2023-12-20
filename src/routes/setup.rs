@@ -13,8 +13,8 @@ use axum::{extract::ConnectInfo, http::HeaderMap, response::IntoResponse, Extens
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use google_authenticator::GoogleAuthenticator;
-use tracing::warn;
 use std::{net::SocketAddr, sync::Arc};
+use tracing::warn;
 
 fn validate_invite_token(
     invite_token: &String,
@@ -66,7 +66,7 @@ fn validate_invite_token(
 }
 
 pub async fn validate_invite_token_route(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
     axum::response::Json(invite_token): axum::response::Json<InviteToken>,
