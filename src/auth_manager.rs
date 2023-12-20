@@ -21,6 +21,7 @@ use google_authenticator::GoogleAuthenticator;
 use parking_lot::RwLock;
 use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tracing::info;
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
@@ -296,10 +297,12 @@ impl AuthManager {
 
         let user_token: UserToken = UserToken::new(token_mode, user_id);
 
-        self.create_signed_and_encrypted_token_with_expiry(user_token, expiry)
-
+        let t = self.create_signed_and_encrypted_token_with_expiry(user_token, expiry);
+        if t.is_ok() {
+            info!("Read token refreshed for user {}", user_id);
+        }
+        t
         //TODO: Add requirement for minimum number of expected headers to be present to prevent clients sending minimal headers
-        /* self.generate_read_token(headers, user_id) */
     }
 
     pub fn verify_flow<T: Serialize + DeserializeOwned>(
