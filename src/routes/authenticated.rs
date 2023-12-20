@@ -5,6 +5,7 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
+use axum_extra::{TypedHeader, headers::{Authorization, authorization::Bearer}};
 use serde::Deserialize;
 use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
@@ -18,9 +19,9 @@ pub async fn refresh_read_token_route(
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
-    axum::response::Json(wrapped_token): axum::response::Json<WrappedToken>,
+    TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
 ) -> impl IntoResponse {
-    match auth_manager.refresh_read_token(&wrapped_token.token, &headers) {
+    match auth_manager.refresh_read_token(authorisation.token(), &headers) {
         Ok(token_pair) => (StatusCode::OK, Json(token_pair)).into_response(),
         Err(err) => {
             //TODO: Split out into actual correct errors

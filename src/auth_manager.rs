@@ -265,7 +265,7 @@ impl AuthManager {
 
     pub fn refresh_read_token(
         &self,
-        user_token: &String,
+        user_token: &str,
         headers: &HeaderMap,
     ) -> Result<TokenPair, Error> {
         let (user_token, existing_expiry) = self.verify_and_decrypt::<UserToken>(user_token)?;
