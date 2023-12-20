@@ -74,6 +74,7 @@ pub async fn login_with_credentials_route(
     headers: HeaderMap,
     axum::response::Json(user_login): axum::response::Json<UserLogin>,
 ) -> impl IntoResponse {
+    println!("{:?}", headers);
     match login_with_credentials(user_login, headers, auth_manager) {
         Ok(client_state) => {
             FullResponseData::basic(ResponseData::ClientState(client_state)).into_response()
