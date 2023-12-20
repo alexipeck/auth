@@ -18,10 +18,6 @@ pub async fn refresh_read_token_route(
     headers: HeaderMap,
     axum::response::Json(wrapped_token): axum::response::Json<WrappedToken>,
 ) -> impl IntoResponse {
-    println!("{:?}", addr);
-    //println!("{:?}", headers);
-    //println!("{:?}", cookie);
-
     match auth_manager.refresh_read_token(&wrapped_token.token, &headers) {
         Ok(token_pair) => {
             FullResponseData::basic(ResponseData::NewReadToken(token_pair)).into_response()
@@ -42,9 +38,6 @@ pub fn get_new_write_token_route(
     headers: HeaderMap,
     axum::response::Json(user_login): axum::response::Json<UserLogin>,
 ) -> impl IntoResponse {
-    println!("{:?}", addr);
-    //println!("{:?}", headers);
-    //println!("{:?}", cookie);
     let (token, expiry) = auth_manager.setup_flow::<Option<bool>>(
         &headers,
         FlowType::Write,

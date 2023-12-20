@@ -17,6 +17,7 @@ use axum::{
 };
 use tokio::{net::TcpListener, sync::Notify};
 use tower_http::cors::{AllowOrigin, CorsLayer};
+use tracing::{info, error};
 
 use crate::{
     auth_manager::AuthManager,
@@ -113,12 +114,12 @@ async fn start_server(auth_server: Arc<AuthServer>) {
 
     let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 8886));
     let listener = TcpListener::bind(addr).await.unwrap();
-    println!("REST endpoint listening on {}", addr);
+    info!("REST endpoint listening on {}", addr);
 
     tokio::select! {
         result = async { axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await } => {
             if let Err(err) = result {
-                println!("{}", err);
+                panic!("{}", err);
             }
         }
         _ = auth_server.signals.stop_notify.notified() => {},

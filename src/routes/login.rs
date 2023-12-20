@@ -10,7 +10,7 @@ use crate::{
 use axum::{extract::ConnectInfo, http::HeaderMap, response::IntoResponse, Extension};
 use chrono::Duration;
 use std::{net::SocketAddr, sync::Arc};
-use tracing::warn;
+use tracing::{warn, info};
 
 fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result<LoginFlow, Error> {
     let token_pair: TokenPair = auth_manager.setup_flow_with_lifetime::<Option<bool>>(
@@ -30,8 +30,6 @@ pub async fn init_login_flow_route(
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    //println!("{:?}", headers);
-    //println!("{:?}", addr);
     match init_login_flow(headers, auth_manager) {
         Ok(login_flow) => {
             FullResponseData::basic(ResponseData::InitLoginFlow(login_flow)).into_response()
@@ -60,7 +58,7 @@ fn login_with_credentials(
     )?;
     let user_session =
         UserSession::create_from_user_id(user_profile.user_id, headers, auth_manager)?;
-    println!(
+    info!(
         "User authenticated: ({}, {}, {})",
         user_profile.display_name, user_profile.email, user_profile.user_id
     );
@@ -76,9 +74,6 @@ pub async fn login_with_credentials_route(
     headers: HeaderMap,
     axum::response::Json(user_login): axum::response::Json<UserLogin>,
 ) -> impl IntoResponse {
-    println!("{:?}", addr);
-    //println!("{:?}", headers);
-    //println!("{:?}", cookie);
     match login_with_credentials(user_login, headers, auth_manager) {
         Ok(client_state) => {
             FullResponseData::basic(ResponseData::ClientState(client_state)).into_response()

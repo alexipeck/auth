@@ -274,10 +274,6 @@ impl Token {
                 }
             };
             if header.alg != Algorithm::RSASHA256 {
-                println!(
-                    "Header algorithm doesn't match expected {}",
-                    Algorithm::RSASHA256
-                );
                 return Err(InternalError::Token(TokenError::HeadedUnexpectedAlgorithm).into());
             }
         }
@@ -357,8 +353,6 @@ impl Token {
                 )
             }
         };
-
-        //println!("{}", decrypted_data_str);
 
         let decrypted_data_struct: TokenWrapper<T> =
             match serde_json::from_str::<TokenWrapper<T>>(&decrypted_data_str) {

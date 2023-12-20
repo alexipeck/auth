@@ -16,6 +16,7 @@ use cookie::{
     CookieBuilder, Expiration, SameSite,
 };
 use serde::Serialize;
+use tracing::warn;
 
 fn create_baseline_response() -> Builder {
     let csp_data: String = format!(
@@ -107,7 +108,7 @@ impl IntoResponse for FullResponseData {
         let json_body = match serde_json::to_string(&self.response_data) {
             Ok(json) => json,
             Err(err) => {
-                println!("{}", err);
+                warn!("{}", err);
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json("Internal server error"),
@@ -133,7 +134,7 @@ impl IntoResponse for FullResponseData {
         match response_builder.body(Body::from(json_body)) {
             Ok(response_body) => response_body,
             Err(err) => {
-                println!("{}", err);
+                warn!("{}", err);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json("Internal server error"),

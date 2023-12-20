@@ -370,7 +370,6 @@ impl AuthManager {
         }
         let _ = self.users.write().insert(user_id, user);
         self.email_to_id_registry.write().insert(email, user_id);
-        println!("{}", token_pair.token);
         self.smtp_manager.send_email_to_recipient(
             "alexinicolaspeck@gmail.com".into(),
             "Invite Link".into(),

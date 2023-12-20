@@ -9,6 +9,7 @@ use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 use rand_core::{OsRng, RngCore, SeedableRng};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tracing::warn;
 
 use crate::error::{
     Base64DecodeError, ClientPayloadError, EncryptionError, Error, FromUtf8Error, InternalError,
@@ -138,9 +139,9 @@ impl EncryptionKeys {
 
     pub fn get_public_encryption_key_string(&self) -> Result<String, Error> {
         let public_pem_bytes = match self.public_key.public_key_to_pem() {
-            Ok(t) => t,
+            Ok(public_pem_bytes) => public_pem_bytes,
             Err(err) => {
-                println!("{}", err);
+                warn!("{}", err);
                 return Err(
                     InternalError::Encryption(EncryptionError::PublicToPEMConversion(
                         OpenSSLError(err),
@@ -151,15 +152,12 @@ impl EncryptionKeys {
         };
         match from_utf8(&public_pem_bytes) {
             Ok(public_pem_str) => Ok(public_pem_str.to_string()),
-            Err(err) => {
-                println!("{}", err);
-                Err(
-                    InternalError::Encryption(EncryptionError::PublicPEMBytesToString(Utf8Error(
-                        err,
-                    )))
-                    .into(),
-                )
-            }
+            Err(err) => Err(
+                InternalError::Encryption(EncryptionError::PublicPEMBytesToString(Utf8Error(
+                    err,
+                )))
+                .into(),
+            ),
         }
     }
 
@@ -234,7 +232,6 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
             )
         }
     };
-    //println!("{}", decrypted_data_str);
     let decrypted_data_struct: T = match serde_json::from_str::<T>(&decrypted_data_str) {
         Ok(decrypted_data_struct) => decrypted_data_struct,
         Err(err) => {
