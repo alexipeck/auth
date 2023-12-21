@@ -6,7 +6,6 @@ use crate::{
         InviteToken, SetupCredentials, UserInvite, UserInviteInstance, UserSetup, UserSetupFlow,
     },
     r#trait::Expired,
-    response::{FullResponseData, ResponseData},
     user_session::TokenPair,
 };
 use axum::{
@@ -18,7 +17,6 @@ use axum::{
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use google_authenticator::GoogleAuthenticator;
-use serde::Serialize;
 use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
 
@@ -78,12 +76,17 @@ pub async fn validate_invite_token_route(
     axum::response::Json(invite_token): axum::response::Json<InviteToken>,
 ) -> impl IntoResponse {
     match validate_invite_token(&invite_token.token, &headers, auth_manager) {
-        Ok(user_setup_flow) => {
-            FullResponseData::basic(ResponseData::InitSetupFlow(user_setup_flow)).into_response()
-        }
+        Ok(user_setup_flow) => (StatusCode::OK, Json(user_setup_flow)).into_response(),
         Err(err) => {
             warn!("{}", err);
-            FullResponseData::basic(ResponseData::InternalServerError).into_response()
+            match err {
+                Error::AccountSetup(
+                    AccountSetupError::InvalidInvite
+                    | AccountSetupError::AccountSetupAlreadyComplete,
+                ) => StatusCode::UNAUTHORIZED,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            }
+            .into_response()
         }
     }
 }
@@ -140,57 +143,25 @@ fn setup_user_account(
     Ok(())
 }
 
-#[derive(Debug, Serialize)]
-enum AccountSetupResponse {
-    SetupComplete,
-    InvalidPassword,
-    Incorrect2FACode,
-    AccountSetupAlreadyComplete,
-    InvalidInvite,
-    InternalError,
-    UnhandledError,
-}
-
-impl From<Result<(), Error>> for AccountSetupResponse {
-    fn from(value: Result<(), Error>) -> Self {
-        match value {
-            Ok(_) => AccountSetupResponse::SetupComplete,
-            Err(Error::AccountSetup(err)) => match err {
-                AccountSetupError::InvalidPassword => Self::InvalidPassword,
-                AccountSetupError::Incorrect2FACode => Self::Incorrect2FACode,
-                AccountSetupError::Argon2(_)
-                | AccountSetupError::CouldntGetUserIDFromEmail
-                | AccountSetupError::UserNotFound(_)
-                | AccountSetupError::GoogleAuthenticator(_) => Self::InternalError,
-                AccountSetupError::InvalidInvite => Self::InvalidInvite,
-                AccountSetupError::AccountSetupAlreadyComplete => Self::AccountSetupAlreadyComplete,
-            },
-            _ => Self::UnhandledError,
-        }
-    }
-}
-
-impl IntoResponse for AccountSetupResponse {
-    fn into_response(self) -> axum::response::Response {
-        match self {
-            Self::SetupComplete => StatusCode::OK.into_response(),
-            Self::InvalidPassword | Self::Incorrect2FACode => {
-                (StatusCode::BAD_REQUEST, Json(self)).into_response()
-            }
-            Self::AccountSetupAlreadyComplete | Self::InvalidInvite => {
-                (StatusCode::CONFLICT, Json(self)).into_response()
-            }
-            Self::InternalError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-            Self::UnhandledError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        }
-    }
-}
-
 pub async fn setup_user_account_route(
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
     axum::response::Json(user_setup): axum::response::Json<UserSetup>,
 ) -> impl IntoResponse {
-    AccountSetupResponse::from(setup_user_account(user_setup, &headers, auth_manager))
+    match setup_user_account(user_setup, &headers, auth_manager) {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => match err {
+            Error::AccountSetup(AccountSetupError::InvalidPassword) => {
+                (StatusCode::BAD_REQUEST, "InvalidPassword").into_response()
+            }
+            Error::AccountSetup(AccountSetupError::Incorrect2FACode) => {
+                (StatusCode::BAD_REQUEST, "Incorrect2FACode").into_response()
+            }
+            Error::AccountSetup(
+                AccountSetupError::InvalidInvite | AccountSetupError::AccountSetupAlreadyComplete,
+            ) => (StatusCode::CONFLICT, "InvalidInvite").into_response(),
+            _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        },
+    }
 }
