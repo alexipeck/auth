@@ -142,31 +142,19 @@ fn setup_user_account(
 
 #[derive(Debug, Serialize)]
 enum AccountSetupResponse {
+    SetupComplete,
     InvalidPassword,
     Incorrect2FACode,
     AccountSetupAlreadyComplete,
     InvalidInvite,
     InternalError,
 }
-impl IntoResponse for AccountSetupResponse {
-    fn into_response(self) -> axum::response::Response {
-        (
-            match self {
-                Self::InvalidPassword | Self::Incorrect2FACode => StatusCode::BAD_REQUEST,
-                Self::AccountSetupAlreadyComplete | Self::InvalidInvite => StatusCode::CONFLICT,
-                Self::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
-            },
-            Json(self),
-        )
-            .into_response()
-    }
-}
 
-///expects only AccountSetupError and will return InternalError otherwise
-impl From<Error> for AccountSetupResponse {
-    fn from(value: Error) -> Self {
+impl From<Result<(), Error>> for AccountSetupResponse {
+    fn from(value: Result<(), Error>) -> Self {
         match value {
-            Error::AccountSetup(err) => match err {
+            Ok(_) => AccountSetupResponse::SetupComplete,
+            Err(Error::AccountSetup(err)) => match err {
                 AccountSetupError::InvalidPassword => Self::InvalidPassword,
                 AccountSetupError::Incorrect2FACode => Self::Incorrect2FACode,
                 AccountSetupError::Argon2(_)
@@ -181,17 +169,26 @@ impl From<Error> for AccountSetupResponse {
     }
 }
 
+impl IntoResponse for AccountSetupResponse {
+    fn into_response(self) -> axum::response::Response {
+        (
+            match self {
+                Self::SetupComplete => StatusCode::OK,
+                Self::InvalidPassword | Self::Incorrect2FACode => StatusCode::BAD_REQUEST,
+                Self::AccountSetupAlreadyComplete | Self::InvalidInvite => StatusCode::CONFLICT,
+                Self::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
+            },
+            Json(self),
+        )
+            .into_response()
+    }
+}
+
 pub async fn setup_user_account_route(
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
     axum::response::Json(user_setup): axum::response::Json<UserSetup>,
 ) -> impl IntoResponse {
-    match setup_user_account(user_setup, &headers, auth_manager) {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(err) => {
-            warn!("{}", err);
-            AccountSetupResponse::from(err).into_response()
-        }
-    }
+    AccountSetupResponse::from(setup_user_account(user_setup, &headers, auth_manager)).into_response()
 }
