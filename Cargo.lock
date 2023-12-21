@@ -87,6 +87,7 @@ name = "auth"
 version = "0.1.1"
 dependencies = [
  "axum",
+ "axum-core",
  "axum-extra",
  "base64",
  "blake3",

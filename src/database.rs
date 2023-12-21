@@ -1,4 +1,4 @@
-use crate::error::{DatabaseError, DieselResultError, Error, InternalError};
+use crate::error::{DatabaseError, DieselResultError, Error};
 use crate::model::UserModel;
 use crate::schema::{user as user_table, user::dsl::user as user_data, user::id as user_id};
 use crate::user::User;
@@ -33,10 +33,9 @@ pub fn save_user(connection: &mut SqliteConnection, user: &User) -> Result<usize
         .execute(connection)
     {
         Ok(rows_affected) => Ok(rows_affected),
-        Err(err) => Err(InternalError::Database(DatabaseError::DatabaseInsertUser(
+        Err(err) => Err(Error::Database(DatabaseError::DatabaseInsertUser(
             DieselResultError(err),
-        ))
-        .into()),
+        ))),
     }
 }
 
@@ -46,10 +45,9 @@ pub fn update_user(conn: &mut SqliteConnection, user: &User) -> Result<usize, Er
         .execute(conn)
     {
         Ok(rows_affected) => Ok(rows_affected),
-        Err(err) => Err(InternalError::Database(DatabaseError::DatabaseUpdateUser(
+        Err(err) => Err(Error::Database(DatabaseError::DatabaseUpdateUser(
             DieselResultError(err),
-        ))
-        .into()),
+        ))),
     }
 }
 
@@ -68,7 +66,7 @@ pub fn get_all_users(connection: &mut SqliteConnection) -> Result<HashMap<Uuid, 
             Ok(users)
         }
         Err(err) => Err(
-            InternalError::Database(DatabaseError::LoadingUserModelsFromDatabase(
+            Error::Database(DatabaseError::LoadingUserModelsFromDatabase(
                 DieselResultError(err),
             ))
             .into(),

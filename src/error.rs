@@ -125,14 +125,12 @@ pub enum AccountSetupError {
     InvalidPassword,
     #[error("Incorrect2FACode")]
     Incorrect2FACode,
-    #[error("InvalidToken")]
-    InvalidToken,
     #[error("Argon2({0})")]
     Argon2(#[from] argon2::Error),
     #[error("GoogleAuthenticator({0})")]
     GoogleAuthenticator(#[from] GAError),
-    #[error("AccountSetupNotIncomplete")]
-    AccountSetupNotIncomplete,
+    #[error("AccountSetupAlreadyComplete")]
+    AccountSetupAlreadyComplete,
     #[error("UserNotFound({0})")]
     UserNotFound(Uuid),
     #[error("CouldntGetUserIDFromEmail")]
@@ -228,7 +226,7 @@ pub enum ReadTokenValidationError {
 }
 
 #[derive(Error, Debug)]
-pub enum InternalError {
+pub enum Error {
     #[error("AuthFlow({0})")]
     AuthFlow(#[from] AuthFlowError),
     #[error("AccountSetupError({0})")]
@@ -257,10 +255,4 @@ pub enum InternalError {
     UserFromModel(UserFromModelError),
     #[error("Database({0})")]
     Database(DatabaseError),
-}
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Internal({0})")]
-    Internal(#[from] InternalError),
 }

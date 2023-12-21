@@ -1,7 +1,7 @@
 use crate::{
     auth_manager::AuthManager,
     base::debug_route,
-    error::{AuthServerBuildError, Error, InternalError},
+    error::{AuthServerBuildError, Error},
     routes::{
         authenticated::refresh_read_token_route,
         login::{init_login_flow_route, login_with_credentials_route},
@@ -222,7 +222,7 @@ impl Builder {
         }
         if !missing_properties.is_empty() {
             return Err(
-                InternalError::AuthServerBuild(AuthServerBuildError::MissingProperties(format!(
+                Error::AuthServerBuild(AuthServerBuildError::MissingProperties(format!(
                     "{:?}",
                     missing_properties
                 )))

@@ -12,8 +12,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tracing::warn;
 
 use crate::error::{
-    Base64DecodeError, ClientPayloadError, EncryptionError, Error, FromUtf8Error, InternalError,
-    OpenSSLError, SerdeError, Utf8Error,
+    Base64DecodeError, ClientPayloadError, EncryptionError, Error, FromUtf8Error, OpenSSLError,
+    SerdeError, Utf8Error,
 };
 
 pub const TOKEN_CHARSET: [char; 88] = [
@@ -82,10 +82,7 @@ impl EncryptionKeys {
             Ok(rsa) => rsa,
             Err(err) => {
                 return Err(
-                    InternalError::Encryption(EncryptionError::GeneratingRSABase(OpenSSLError(
-                        err,
-                    )))
-                    .into(),
+                    Error::Encryption(EncryptionError::GeneratingRSABase(OpenSSLError(err))).into(),
                 )
             }
         };
@@ -93,32 +90,26 @@ impl EncryptionKeys {
             Ok(private_key) => private_key,
             Err(err) => {
                 return Err(
-                    InternalError::Encryption(EncryptionError::GeneratingRSAPrivate(OpenSSLError(
-                        err,
-                    )))
-                    .into(),
+                    Error::Encryption(EncryptionError::GeneratingRSAPrivate(OpenSSLError(err)))
+                        .into(),
                 )
             }
         };
         let public_key_pem: Vec<u8> = match rsa.public_key_to_pem() {
             Ok(public_key_pem) => public_key_pem,
             Err(err) => {
-                return Err(
-                    InternalError::Encryption(EncryptionError::GeneratingRSAPublicPEM(
-                        OpenSSLError(err),
-                    ))
-                    .into(),
-                )
+                return Err(Error::Encryption(EncryptionError::GeneratingRSAPublicPEM(
+                    OpenSSLError(err),
+                ))
+                .into())
             }
         };
         let public_key = match PKey::public_key_from_pem(&public_key_pem) {
             Ok(public_key) => public_key,
             Err(err) => {
                 return Err(
-                    InternalError::Encryption(EncryptionError::GeneratingRSAPublic(OpenSSLError(
-                        err,
-                    )))
-                    .into(),
+                    Error::Encryption(EncryptionError::GeneratingRSAPublic(OpenSSLError(err)))
+                        .into(),
                 )
             }
         };
@@ -142,19 +133,16 @@ impl EncryptionKeys {
             Ok(public_pem_bytes) => public_pem_bytes,
             Err(err) => {
                 warn!("{}", err);
-                return Err(
-                    InternalError::Encryption(EncryptionError::PublicToPEMConversion(
-                        OpenSSLError(err),
-                    ))
-                    .into(),
-                );
+                return Err(Error::Encryption(EncryptionError::PublicToPEMConversion(
+                    OpenSSLError(err),
+                ))
+                .into());
             }
         };
         match from_utf8(&public_pem_bytes) {
             Ok(public_pem_str) => Ok(public_pem_str.to_string()),
             Err(err) => Err(
-                InternalError::Encryption(EncryptionError::PublicPEMBytesToString(Utf8Error(err)))
-                    .into(),
+                Error::Encryption(EncryptionError::PublicPEMBytesToString(Utf8Error(err))).into(),
             ),
         }
     }
@@ -186,7 +174,7 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
             Ok(encrypted_data_bytes) => encrypted_data_bytes,
             Err(err) => {
                 return Err(
-                    InternalError::ClientPayload(ClientPayloadError::UrlSafeBase64Decode(
+                    Error::ClientPayload(ClientPayloadError::UrlSafeBase64Decode(
                         Base64DecodeError(err),
                     ))
                     .into(),
@@ -199,8 +187,7 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
         Ok(rsa_private) => rsa_private,
         Err(err) => {
             return Err(
-                InternalError::Encryption(EncryptionError::RSAPrivateConversion(OpenSSLError(err)))
-                    .into(),
+                Error::Encryption(EncryptionError::RSAPrivateConversion(OpenSSLError(err))).into(),
             )
         }
     };
@@ -212,8 +199,7 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
         Ok(decrypted_data_len) => decrypted_data_len,
         Err(err) => {
             return Err(
-                InternalError::Encryption(EncryptionError::DataDecryption(OpenSSLError(err)))
-                    .into(),
+                Error::Encryption(EncryptionError::DataDecryption(OpenSSLError(err))).into(),
             )
         }
     };
@@ -223,10 +209,8 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
         Ok(decrypted_data_str) => decrypted_data_str,
         Err(err) => {
             return Err(
-                InternalError::ClientPayload(ClientPayloadError::DataBytesToString(FromUtf8Error(
-                    err,
-                )))
-                .into(),
+                Error::ClientPayload(ClientPayloadError::DataBytesToString(FromUtf8Error(err)))
+                    .into(),
             )
         }
     };
@@ -234,10 +218,8 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
         Ok(decrypted_data_struct) => decrypted_data_struct,
         Err(err) => {
             return Err(
-                InternalError::ClientPayload(ClientPayloadError::DataDeserialisation(SerdeError(
-                    err,
-                )))
-                .into(),
+                Error::ClientPayload(ClientPayloadError::DataDeserialisation(SerdeError(err)))
+                    .into(),
             )
         }
     };

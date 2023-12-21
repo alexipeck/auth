@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     cryptography::generate_token,
-    error::{AccountSetupError, Error, InternalError},
+    error::{AccountSetupError, Error},
     model::UserModel,
     user_session::UserSession,
 };
@@ -65,9 +65,7 @@ impl User {
         two_fa_client_secret: String,
     ) -> Result<(), Error> {
         if !self.incomplete() {
-            return Err(
-                InternalError::AccountSetup(AccountSetupError::AccountSetupNotIncomplete).into(),
-            );
+            return Err(Error::AccountSetup(AccountSetupError::AccountSetupAlreadyComplete).into());
         }
         let salt = generate_token(32);
         let hashed_and_salted_password = match argon2::hash_encoded(
@@ -76,9 +74,7 @@ impl User {
             &argon2::Config::default(),
         ) {
             Ok(hashed_and_salted_password) => hashed_and_salted_password,
-            Err(err) => {
-                return Err(InternalError::AccountSetup(AccountSetupError::Argon2(err)).into())
-            }
+            Err(err) => return Err(Error::AccountSetup(AccountSetupError::Argon2(err))),
         };
         self.hashed_and_salted_password = hashed_and_salted_password;
         self.two_fa_client_secret = two_fa_client_secret;

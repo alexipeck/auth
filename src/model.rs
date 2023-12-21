@@ -5,7 +5,7 @@ use email_address::EmailAddress;
 use uuid::Uuid;
 
 use crate::{
-    error::{Error, InternalError, UserFromModelError, UuidError},
+    error::{Error, UserFromModelError, UuidError},
     schema::user,
     user::User,
 };
@@ -38,23 +38,20 @@ impl UserModel {
         }
     }
     pub fn to_user(self) -> Result<User, Error> {
-        let id: Uuid =
-            match Uuid::parse_str(&self.id) {
-                Ok(id) => id,
-                Err(err) => {
-                    return Err(InternalError::UserFromModel(
-                        UserFromModelError::ParseUuidFromString(UuidError(err)),
-                    )
-                    .into())
-                }
-            };
+        let id: Uuid = match Uuid::parse_str(&self.id) {
+            Ok(id) => id,
+            Err(err) => {
+                return Err(Error::UserFromModel(
+                    UserFromModelError::ParseUuidFromString(UuidError(err)),
+                ))
+            }
+        };
         let email_address: EmailAddress = match EmailAddress::from_str(&self.email) {
             Ok(email) => email,
             Err(err) => {
-                return Err(InternalError::UserFromModel(
+                return Err(Error::UserFromModel(
                     UserFromModelError::ParseEmailAddressFromString(err.to_string()),
-                )
-                .into())
+                ))
             }
         };
         Ok(User::new(

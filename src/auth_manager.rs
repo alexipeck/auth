@@ -2,8 +2,8 @@ use crate::{
     cryptography::EncryptionKeys,
     database::{establish_connection, get_all_users, save_user, update_user},
     error::{
-        AccountSetupError, AuthenticationError, Error, InternalError, LoginError,
-        ReadTokenAsRefreshTokenError, ReadTokenValidationError, StartupError,
+        AccountSetupError, AuthenticationError, Error, LoginError, ReadTokenAsRefreshTokenError,
+        ReadTokenValidationError, StartupError,
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
@@ -21,8 +21,8 @@ use google_authenticator::GoogleAuthenticator;
 use parking_lot::RwLock;
 use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use tracing::info;
 use std::{collections::HashMap, sync::Arc};
+use tracing::info;
 use uuid::Uuid;
 
 pub struct Regexes {
@@ -160,9 +160,7 @@ impl AuthManager {
     ) -> Result<Self, Error> {
         let allowed_origin: HeaderValue = match allowed_origin.parse() {
             Ok(allowed_origin) => allowed_origin,
-            Err(err) => {
-                return Err(InternalError::Startup(StartupError::InvalidOrigin(err.into())).into())
-            }
+            Err(err) => return Err(Error::Startup(StartupError::InvalidOrigin(err.into()))),
         };
         let users = get_all_users(&mut establish_connection(&database_url))?;
         let email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>> = Arc::new(RwLock::new(
@@ -271,15 +269,13 @@ impl AuthManager {
     ) -> Result<TokenPair, Error> {
         let (user_token, existing_expiry) = self.verify_and_decrypt::<UserToken>(user_token)?;
         if existing_expiry.expired() {
-            return Err(InternalError::ReadTokenAsRefreshToken(
+            return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::Expired,
-            )
-            .into());
+            ));
         } else if existing_expiry.timestamp() - Utc::now().timestamp() > REFRESH_IN_LAST_X_SECONDS {
-            return Err(InternalError::ReadTokenAsRefreshToken(
+            return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::NotUsedWithinValidRefreshPeriod,
-            )
-            .into());
+            ));
         }
         let (user_id, mut token_mode) = user_token.extract();
         let expiry: DateTime<Utc>;
@@ -289,10 +285,9 @@ impl AuthManager {
                     .hash_debug(),
             )?;
         } else {
-            return Err(InternalError::ReadTokenAsRefreshToken(
+            return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::NotReadToken,
-            )
-            .into());
+            ));
         };
 
         let user_token: UserToken = UserToken::new(token_mode, user_id);
@@ -316,7 +311,7 @@ impl AuthManager {
 
         let key: String = headers.hash_debug();
         if &key != flow.get_header_key() {
-            return Err(InternalError::Login(LoginError::HeaderKeysDontMatch).into());
+            return Err(Error::Login(LoginError::HeaderKeysDontMatch));
         }
         Ok((flow.data, expiry))
     }
@@ -400,10 +395,9 @@ impl AuthManager {
         let user_id: Uuid = match self.get_user_id_from_email(email) {
             Some(user_id) => user_id,
             None => {
-                return Err(InternalError::AccountSetup(
+                return Err(Error::AccountSetup(
                     AccountSetupError::CouldntGetUserIDFromEmail,
-                )
-                .into())
+                ))
             }
         };
         return if let Some(user) = self.users.write().get_mut(&user_id) {
@@ -413,7 +407,9 @@ impl AuthManager {
             }
             Ok(())
         } else {
-            Err(InternalError::AccountSetup(AccountSetupError::UserNotFound(user_id)).into())
+            Err(Error::AccountSetup(AccountSetupError::UserNotFound(
+                user_id,
+            )))
         };
     }
 
@@ -425,15 +421,14 @@ impl AuthManager {
                 != &filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
                     .hash_debug()
             {
-                return Err(InternalError::ReadTokenValidation(
+                return Err(Error::ReadTokenValidation(
                     ReadTokenValidationError::InvalidHeaders,
-                )
-                .into());
+                ));
             }
         } else {
-            return Err(
-                InternalError::ReadTokenValidation(ReadTokenValidationError::NotReadToken).into(),
-            );
+            return Err(Error::ReadTokenValidation(
+                ReadTokenValidationError::NotReadToken,
+            ));
         }
         Ok(user_id)
     }
@@ -448,10 +443,9 @@ impl AuthManager {
             Some(user_id) => match self.users.read().get(user_id) {
                 Some(user) => {
                     if user.incomplete() {
-                        return Err(InternalError::Authentication(
+                        return Err(Error::Authentication(
                             AuthenticationError::AccountSetupIncomplete,
-                        )
-                        .into());
+                        ));
                     }
                     match argon2::verify_encoded(
                         user.get_hashed_and_salted_password(),
@@ -465,41 +459,33 @@ impl AuthManager {
                                         if two_factor_code == current_code {
                                             Ok(user.to_user_profile())
                                         } else {
-                                            Err(InternalError::Authentication(
+                                            Err(Error::Authentication(
                                                 AuthenticationError::Incorrect2FACode,
-                                            )
-                                            .into())
+                                            ))
                                         }
                                     }
-                                    Err(err) => Err(InternalError::Authentication(
+                                    Err(err) => Err(Error::Authentication(
                                         AuthenticationError::GoogleAuthenticator(err),
-                                    )
-                                    .into()),
+                                    )),
                                 }
                             } else {
-                                Err(InternalError::Authentication(
+                                Err(Error::Authentication(
                                     AuthenticationError::IncorrectCredentials,
-                                )
-                                .into())
+                                ))
                             }
                         }
-                        Err(err) => Err(InternalError::Authentication(
+                        Err(err) => Err(Error::Authentication(
                             AuthenticationError::InvalidPasswordFormat(err),
-                        )
-                        .into()),
+                        )),
                     }
                 }
-                None => Err(InternalError::Authentication(
+                None => Err(Error::Authentication(
                     AuthenticationError::UserUIDNotRegisteredToEmail(email.to_owned()),
-                )
-                .into()),
+                )),
             },
-            None => Err(
-                InternalError::Authentication(AuthenticationError::EmailNotRegistered(
-                    email.to_owned(),
-                ))
-                .into(),
-            ),
+            None => Err(Error::Authentication(
+                AuthenticationError::EmailNotRegistered(email.to_owned()),
+            )),
         }
     }
 }

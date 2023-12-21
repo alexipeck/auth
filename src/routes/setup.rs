@@ -1,7 +1,7 @@
 use crate::{
     auth_manager::{AuthManager, FlowType},
     cryptography::decrypt_url_safe_base64_with_private_key,
-    error::{AccountSetupError, Error, InternalError},
+    error::{AccountSetupError, Error},
     flows::user_setup::{
         InviteToken, SetupCredentials, UserInvite, UserInviteInstance, UserSetup, UserSetupFlow,
     },
@@ -9,10 +9,16 @@ use crate::{
     response::{FullResponseData, ResponseData},
     user_session::TokenPair,
 };
-use axum::{extract::ConnectInfo, http::HeaderMap, response::IntoResponse, Extension};
+use axum::{
+    extract::ConnectInfo,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    Extension, Json,
+};
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use google_authenticator::GoogleAuthenticator;
+use serde::Serialize;
 use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
 
@@ -26,11 +32,11 @@ fn validate_invite_token(
         let user_setup_incomplete: Option<bool> =
             auth_manager.user_setup_incomplete(user_invite.get_user_id());
         if user_setup_incomplete.is_none() {
-            return Err(InternalError::AccountSetup(AccountSetupError::InvalidInvite).into());
+            return Err(Error::AccountSetup(AccountSetupError::InvalidInvite));
         } else if user_setup_incomplete.unwrap() == false {
-            return Err(
-                InternalError::AccountSetup(AccountSetupError::AccountSetupNotIncomplete).into(),
-            );
+            return Err(Error::AccountSetup(
+                AccountSetupError::AccountSetupAlreadyComplete,
+            ));
         }
         (UserInviteInstance::from_user_invite(user_invite), expiry)
     };
@@ -92,11 +98,11 @@ fn setup_user_account(
     let user_setup_incomplete: Option<bool> =
         auth_manager.user_setup_incomplete(user_invite_instance.get_user_id());
     if user_setup_incomplete.is_none() {
-        return Err(InternalError::AccountSetup(AccountSetupError::InvalidInvite).into());
+        return Err(Error::AccountSetup(AccountSetupError::InvalidInvite));
     } else if user_setup_incomplete.unwrap() == false {
-        return Err(
-            InternalError::AccountSetup(AccountSetupError::AccountSetupNotIncomplete).into(),
-        );
+        return Err(Error::AccountSetup(
+            AccountSetupError::AccountSetupAlreadyComplete,
+        ));
     }
     let credentials: SetupCredentials = decrypt_url_safe_base64_with_private_key::<SetupCredentials>(
         user_setup.encrypted_credentials,
@@ -108,22 +114,20 @@ fn setup_user_account(
     match auth.get_code(&user_invite_instance.get_two_fa_client_secret(), 0) {
         Ok(current_code) => {
             if credentials.two_fa_code != current_code {
-                return Err(
-                    InternalError::AccountSetup(AccountSetupError::Incorrect2FACode).into(),
-                );
+                return Err(Error::AccountSetup(AccountSetupError::Incorrect2FACode));
             }
         }
         Err(err) => {
-            return Err(
-                InternalError::AccountSetup(AccountSetupError::GoogleAuthenticator(err)).into(),
-            )
+            return Err(Error::AccountSetup(AccountSetupError::GoogleAuthenticator(
+                err,
+            )))
         }
     }
 
     //Password complexity checks
     //TODO: Add all the ones from the UI
     if credentials.password.len() < 16 {
-        return Err(InternalError::AccountSetup(AccountSetupError::InvalidPassword).into());
+        return Err(Error::AccountSetup(AccountSetupError::InvalidPassword));
     }
 
     auth_manager.setup_user(
@@ -136,6 +140,47 @@ fn setup_user_account(
     Ok(())
 }
 
+#[derive(Debug, Serialize)]
+enum AccountSetupResponse {
+    InvalidPassword,
+    Incorrect2FACode,
+    AccountSetupAlreadyComplete,
+    InvalidInvite,
+    InternalError,
+}
+impl IntoResponse for AccountSetupResponse {
+    fn into_response(self) -> axum::response::Response {
+        (
+            match self {
+                Self::InvalidPassword | Self::Incorrect2FACode => StatusCode::BAD_REQUEST,
+                Self::AccountSetupAlreadyComplete | Self::InvalidInvite => StatusCode::CONFLICT,
+                Self::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
+            },
+            Json(self),
+        )
+            .into_response()
+    }
+}
+
+///expects only AccountSetupError and will return InternalError otherwise
+impl From<Error> for AccountSetupResponse {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::AccountSetup(err) => match err {
+                AccountSetupError::InvalidPassword => Self::InvalidPassword,
+                AccountSetupError::Incorrect2FACode => Self::Incorrect2FACode,
+                AccountSetupError::Argon2(_)
+                | AccountSetupError::CouldntGetUserIDFromEmail
+                | AccountSetupError::UserNotFound(_)
+                | AccountSetupError::GoogleAuthenticator(_) => Self::InternalError,
+                AccountSetupError::InvalidInvite => Self::InvalidInvite,
+                AccountSetupError::AccountSetupAlreadyComplete => Self::AccountSetupAlreadyComplete,
+            },
+            _ => Self::InternalError,
+        }
+    }
+}
+
 pub async fn setup_user_account_route(
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
@@ -143,10 +188,10 @@ pub async fn setup_user_account_route(
     axum::response::Json(user_setup): axum::response::Json<UserSetup>,
 ) -> impl IntoResponse {
     match setup_user_account(user_setup, &headers, auth_manager) {
-        Ok(_) => FullResponseData::basic(ResponseData::SetupComplete).into_response(),
+        Ok(_) => StatusCode::OK.into_response(),
         Err(err) => {
             warn!("{}", err);
-            FullResponseData::basic(ResponseData::InternalServerError).into_response()
+            AccountSetupResponse::from(err).into_response()
         }
     }
 }

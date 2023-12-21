@@ -1,6 +1,6 @@
 use crate::{
     auth_manager::AuthManager,
-    error::{Error, InternalError, ReadTokenAsRefreshTokenError},
+    error::{Error, ReadTokenAsRefreshTokenError},
     serde::datetime_utc,
     MAX_READ_ITERATIONS, READ_LIFETIME_SECONDS, WRITE_LIFETIME_SECONDS,
 };
@@ -83,17 +83,15 @@ impl ReadMode {
     }
     pub fn upgrade(&mut self, headers_hash: &String) -> Result<DateTime<Utc>, Error> {
         if &self.headers_hash != headers_hash {
-            return Err(InternalError::ReadTokenAsRefreshToken(
+            return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::InvalidHeaders,
-            )
-            .into());
+            ));
         }
         self.iteration += 1;
         if self.iteration >= self.iteration_limit {
-            return Err(InternalError::ReadTokenAsRefreshToken(
+            return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::HasHitIterationLimit,
-            )
-            .into());
+            ));
         }
         let expiry: DateTime<Utc> = {
             let proposed_expiry: DateTime<Utc> =

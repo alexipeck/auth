@@ -13,6 +13,7 @@ tokio = { version = "1.35.1", default-features = false, features = ["macros", "n
 base64 = "0.21.5"
 axum = { version = "0.7.2", features = ["http2", "tokio"] }
 axum-extra = { version = "0.9.0", features = ["typed-header"] }
+axum-core = "0.4.1"
 tower-http = { version = "0.5.0", features = ["cors", "trace"]}
 uuid = { version = "1.6.1", features = ["v4", "serde"] }
 blake3 = "1.5.0"

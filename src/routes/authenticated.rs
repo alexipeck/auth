@@ -5,15 +5,12 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
-use axum_extra::{TypedHeader, headers::{Authorization, authorization::Bearer}};
-use serde::Deserialize;
+use axum_extra::{
+    headers::{authorization::Bearer, Authorization},
+    TypedHeader,
+};
 use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
-
-#[derive(Debug, Deserialize)]
-pub struct WrappedToken {
-    token: String,
-}
 
 pub async fn refresh_read_token_route(
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,

@@ -1,6 +1,4 @@
-use crate::error::{
-    Error, InternalError, LettreError, SmtpAddressError, SmtpError, SmtpTransportError,
-};
+use crate::error::{Error, LettreError, SmtpAddressError, SmtpError, SmtpTransportError};
 use lettre::{
     message::{header::ContentType, Mailbox},
     transport::smtp::{authentication::Credentials, response::Response, SmtpTransportBuilder},
@@ -23,18 +21,16 @@ impl SmtpManager {
             Ok(sender_address) => sender_address,
             Err(err) => {
                 return Err(
-                    InternalError::Smtp(SmtpError::ServerAddressParse(SmtpAddressError(err)))
-                        .into(),
+                    Error::Smtp(SmtpError::ServerAddressParse(SmtpAddressError(err))).into(),
                 )
             }
         };
         let smtp_transport_builder: SmtpTransportBuilder = match SmtpTransport::relay(&server) {
             Ok(smtp_transport_builder) => smtp_transport_builder,
             Err(err) => {
-                return Err(InternalError::Smtp(SmtpError::SmtpTransportRelayBuild(
+                return Err(Error::Smtp(SmtpError::SmtpTransportRelayBuild(
                     SmtpTransportError(err),
-                ))
-                .into())
+                )))
             }
         };
         let mailer: SmtpTransport = smtp_transport_builder
@@ -55,10 +51,9 @@ impl SmtpManager {
         let recipient: Mailbox = match recipient.parse() {
             Ok(recipient) => recipient,
             Err(err) => {
-                return Err(InternalError::Smtp(SmtpError::RecipientAddressParse(
+                return Err(Error::Smtp(SmtpError::RecipientAddressParse(
                     SmtpAddressError(err),
-                ))
-                .into())
+                )))
             }
         };
         let message = match Message::builder()
@@ -69,16 +64,12 @@ impl SmtpManager {
             .body(content)
         {
             Ok(message) => message,
-            Err(err) => {
-                return Err(InternalError::Smtp(SmtpError::MessageBuilder(LettreError(err))).into())
-            }
+            Err(err) => return Err(Error::Smtp(SmtpError::MessageBuilder(LettreError(err)))),
         };
 
         return match self.mailer.send(&message) {
             Ok(response) => Ok(response),
-            Err(err) => {
-                Err(InternalError::Smtp(SmtpError::MessageSend(SmtpTransportError(err))).into())
-            }
+            Err(err) => Err(Error::Smtp(SmtpError::MessageSend(SmtpTransportError(err)))),
         };
     }
 }
