@@ -148,6 +148,7 @@ enum AccountSetupResponse {
     AccountSetupAlreadyComplete,
     InvalidInvite,
     InternalError,
+    UnhandledError,
 }
 
 impl From<Result<(), Error>> for AccountSetupResponse {
@@ -164,23 +165,24 @@ impl From<Result<(), Error>> for AccountSetupResponse {
                 AccountSetupError::InvalidInvite => Self::InvalidInvite,
                 AccountSetupError::AccountSetupAlreadyComplete => Self::AccountSetupAlreadyComplete,
             },
-            _ => Self::InternalError,
+            _ => Self::UnhandledError,
         }
     }
 }
 
 impl IntoResponse for AccountSetupResponse {
     fn into_response(self) -> axum::response::Response {
-        (
-            match self {
-                Self::SetupComplete => StatusCode::OK,
-                Self::InvalidPassword | Self::Incorrect2FACode => StatusCode::BAD_REQUEST,
-                Self::AccountSetupAlreadyComplete | Self::InvalidInvite => StatusCode::CONFLICT,
-                Self::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
-            },
-            Json(self),
-        )
-            .into_response()
+        match self {
+            Self::SetupComplete => StatusCode::OK.into_response(),
+            Self::InvalidPassword | Self::Incorrect2FACode => {
+                (StatusCode::BAD_REQUEST, Json(self)).into_response()
+            }
+            Self::AccountSetupAlreadyComplete | Self::InvalidInvite => {
+                (StatusCode::CONFLICT, Json(self)).into_response()
+            }
+            Self::InternalError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            Self::UnhandledError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }
     }
 }
 
@@ -190,5 +192,5 @@ pub async fn setup_user_account_route(
     headers: HeaderMap,
     axum::response::Json(user_setup): axum::response::Json<UserSetup>,
 ) -> impl IntoResponse {
-    AccountSetupResponse::from(setup_user_account(user_setup, &headers, auth_manager)).into_response()
+    AccountSetupResponse::from(setup_user_account(user_setup, &headers, auth_manager))
 }
