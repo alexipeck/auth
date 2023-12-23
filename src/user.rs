@@ -107,9 +107,9 @@ impl User {
 
 #[derive(Serialize, Debug, Clone)]
 pub struct UserSafe {
-    id: Uuid,
-    display_name: String,
-    email: EmailAddress,
+    pub id: Uuid,
+    pub display_name: String,
+    pub email: EmailAddress,
 }
 
 #[derive(Debug, Serialize)]
