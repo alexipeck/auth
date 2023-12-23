@@ -10,7 +10,7 @@ use crate::{
     r#trait::{Expired, HashDebug},
     smtp_manager::SmtpManager,
     token::Token,
-    user::{User, UserProfile},
+    user::{User, UserProfile, UserSafe},
     user_session::{ReadMode, TokenMode, TokenPair, UserToken},
     MAX_SESSION_LIFETIME_SECONDS, READ_LIFETIME_SECONDS, REFRESH_IN_LAST_X_SECONDS,
 };
@@ -314,6 +314,14 @@ impl AuthManager {
             return Err(Error::Login(LoginError::HeaderKeysDontMatch));
         }
         Ok((flow.data, expiry))
+    }
+
+    pub fn get_users_safe(&self) -> HashMap<Uuid, UserSafe> {
+        self.users
+            .read()
+            .iter()
+            .map(|(user_id, user)| (*user_id, user.to_safe()))
+            .collect::<HashMap<Uuid, UserSafe>>()
     }
 
     pub fn get_user_id_from_email(&self, email: &EmailAddress) -> Option<Uuid> {

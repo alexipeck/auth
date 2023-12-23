@@ -45,6 +45,13 @@ impl User {
             self.two_fa_client_secret.to_owned(),
         )
     }
+    pub fn to_safe(&self) -> UserSafe {
+        UserSafe {
+            id: self.id,
+            display_name: self.display_name.to_owned(),
+            email: self.email.to_owned(),
+        }
+    }
     pub fn incomplete(&self) -> bool {
         self.display_name.is_empty()
             || self.hashed_and_salted_password.is_empty()
@@ -96,6 +103,13 @@ impl User {
     pub fn get_two_fa_client_secret(&self) -> &String {
         &self.two_fa_client_secret
     }
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct UserSafe {
+    id: Uuid,
+    display_name: String,
+    email: EmailAddress,
 }
 
 #[derive(Debug, Serialize)]

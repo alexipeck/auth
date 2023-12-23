@@ -42,25 +42,6 @@ impl UserSession {
     }
 }
 
-/* #[derive(Debug, Serialize, Deserialize)]
-pub enum AccessLevel {
-    Read(String),
-    Write,
-}
-
-impl fmt::Display for AccessLevel {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Read(_) => "Read",
-                Self::Write => "Write",
-            }
-        )
-    }
-} */
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReadMode {
     headers_hash: String,
