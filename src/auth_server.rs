@@ -103,7 +103,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
             "/authenticated/refresh-read-token",
             get(refresh_read_token_route),
         )
-        .route("/authenticated/get-write-token", get(get_write_token_route))
+        .route("/authenticated/get-write-token", post(get_write_token_route))
         /* .route(
             "/authenticated/twofa-for-write-token",
             post(get_new_write_token_route),
