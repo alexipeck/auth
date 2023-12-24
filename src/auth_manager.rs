@@ -18,7 +18,6 @@ use crate::{
 use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
-use google_authenticator::GoogleAuthenticator;
 use parking_lot::RwLock;
 use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -286,26 +285,12 @@ impl AuthManager {
         Ok((read_token, write_token))
     }
 
-    pub fn generate_write_token_from_read_token(
-        &self,
-        headers: &HeaderMap,
-        read_token: &str,
-    ) -> Result<TokenPair, Error> {
-        let (user_id, read_internal) = self.validate_read_token(read_token, headers)?;
-        let write_internal: crate::user_session::WriteInternal =
-            read_internal.generate_write_internal();
-        self.create_signed_and_encrypted_token_with_lifetime(
-            UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
-            Duration::seconds(WRITE_LIFETIME_SECONDS),
-        )
-    }
-
     pub fn refresh_read_token(
         &self,
-        user_token: &str,
+        token: &str,
         headers: &HeaderMap,
     ) -> Result<TokenPair, Error> {
-        let (user_token, existing_expiry) = self.verify_and_decrypt::<UserToken>(user_token)?;
+        let (user_token, existing_expiry) = self.verify_and_decrypt::<UserToken>(token)?;
         if existing_expiry.expired() {
             return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::Expired,
@@ -335,6 +320,26 @@ impl AuthManager {
             info!("Read token refreshed for user {}", user_id);
         }
         t
+        //TODO: Add requirement for minimum number of expected headers to be present to prevent clients sending minimal headers
+    }
+
+    pub fn generate_write_token(
+        &self,
+        read_token: &str,
+        two_fa_code: String,
+        headers: &HeaderMap,
+    ) -> Result<TokenPair, Error> {
+        let (user_id, read_internal) = self.validate_read_token(read_token, headers)?;
+        if let Some(user) = self.users.read().get(&user_id) {
+            user.validate_two_fa_code(&two_fa_code)?;
+        } else {
+            return Err(Error::Authentication(AuthenticationError::UserNotFound(user_id)));
+        }
+        let write_internal: crate::user_session::WriteInternal = read_internal.generate_write_internal();
+        self.create_signed_and_encrypted_token_with_lifetime(
+            UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
+            Duration::seconds(WRITE_LIFETIME_SECONDS),
+        )
         //TODO: Add requirement for minimum number of expected headers to be present to prevent clients sending minimal headers
     }
 
@@ -485,10 +490,16 @@ impl AuthManager {
 
     pub fn validate_write_token(
         &self,
-        read_token: &str,
-        write_token: &str,
+        token: &str,
         headers: &HeaderMap,
     ) -> Result<Uuid, Error> {
+        let (read_token, write_token) = {
+            let t: Vec<&str> = token.split(':').into_iter().collect::<Vec<&str>>();
+            if t.len() != 2 {
+                return Err(Error::BearerTokenPairInvalidFormat);
+            }
+            (t[0], t[1])
+        };
         let (read_user_id, read_internal) = self.validate_read_token(read_token, headers)?;
         let (user_token, _) = self.verify_and_decrypt::<UserToken>(write_token)?;
         let (write_user_id, token_mode) = user_token.extract();
@@ -523,7 +534,7 @@ impl AuthManager {
         &self,
         email: &EmailAddress,
         password: &String,
-        two_factor_code: String,
+        two_fa_code: String,
     ) -> Result<UserProfile, Error> {
         match self.email_to_id_registry.read().get(email) {
             Some(user_id) => match self.users.read().get(user_id) {
@@ -539,21 +550,8 @@ impl AuthManager {
                     ) {
                         Ok(verified) => {
                             if verified {
-                                let auth = GoogleAuthenticator::new();
-                                match auth.get_code(&user.get_two_fa_client_secret(), 0) {
-                                    Ok(current_code) => {
-                                        if two_factor_code == current_code {
-                                            Ok(user.to_user_profile())
-                                        } else {
-                                            Err(Error::Authentication(
-                                                AuthenticationError::Incorrect2FACode,
-                                            ))
-                                        }
-                                    }
-                                    Err(err) => Err(Error::Authentication(
-                                        AuthenticationError::GoogleAuthenticator(err),
-                                    )),
-                                }
+                                user.validate_two_fa_code(&two_fa_code)?;
+                                Ok(user.to_user_profile())
                             } else {
                                 Err(Error::Authentication(
                                     AuthenticationError::IncorrectCredentials,

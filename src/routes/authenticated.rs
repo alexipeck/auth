@@ -28,6 +28,23 @@ pub async fn refresh_read_token_route(
     }
 }
 
+pub async fn get_write_token_route(
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    Extension(auth_manager): Extension<Arc<AuthManager>>,
+    headers: HeaderMap,
+    TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
+    axum::response::Json(two_fa_code): axum::response::Json<String>,
+) -> impl IntoResponse {
+    match auth_manager.generate_write_token(authorisation.token(), two_fa_code, &headers) {
+        Ok(token_pair) => (StatusCode::OK, Json(token_pair)).into_response(),
+        Err(err) => {
+            //TODO: Split out into actual correct errors
+            warn!("{}", err);
+            StatusCode::UNAUTHORIZED.into_response()
+        }
+    }
+}
+
 /* pub fn get_new_write_token() -> Result<(), Error> {}
 
 pub fn get_new_write_token_route(

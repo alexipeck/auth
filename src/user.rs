@@ -1,10 +1,11 @@
 use email_address::EmailAddress;
+use google_authenticator::GoogleAuthenticator;
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{
     cryptography::generate_token,
-    error::{AccountSetupError, Error},
+    error::{AccountSetupError, Error, AuthenticationError},
     model::UserModel,
     user_session::UserSession,
 };
@@ -100,8 +101,22 @@ impl User {
     pub fn get_hashed_and_salted_password(&self) -> &String {
         &self.hashed_and_salted_password
     }
-    pub fn get_two_fa_client_secret(&self) -> &String {
-        &self.two_fa_client_secret
+    pub fn validate_two_fa_code(&self, two_fa_code: &str) -> Result<(), Error> {
+        let auth = GoogleAuthenticator::new();
+        match auth.get_code(&self.two_fa_client_secret, 0) {
+            Ok(current_code) => {
+                if two_fa_code == current_code {
+                    Ok(())
+                } else {
+                    Err(Error::Authentication(
+                        AuthenticationError::Incorrect2FACode,
+                    ))
+                }
+            }
+            Err(err) => Err(Error::Authentication(
+                AuthenticationError::GoogleAuthenticator(err),
+            )),
+        }
     }
 }
 

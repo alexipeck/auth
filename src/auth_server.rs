@@ -3,7 +3,7 @@ use crate::{
     base::debug_route,
     error::{AuthServerBuildError, Error},
     routes::{
-        authenticated::refresh_read_token_route,
+        authenticated::{refresh_read_token_route, get_write_token_route},
         login::{init_login_flow_route, login_with_credentials_route},
         setup::{setup_user_account_route, validate_invite_token_route},
     },
@@ -103,6 +103,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
             "/authenticated/refresh-read-token",
             get(refresh_read_token_route),
         )
+        .route("/authenticated/get-write-token", get(get_write_token_route))
         /* .route(
             "/authenticated/twofa-for-write-token",
             post(get_new_write_token_route),

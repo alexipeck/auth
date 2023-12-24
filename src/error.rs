@@ -43,6 +43,8 @@ pub enum AuthenticationError {
     EmailNotRegistered(EmailAddress),
     #[error("AccountSetupIncomplete")]
     AccountSetupIncomplete,
+    #[error("UserNotFound({0})")]
+    UserNotFound(Uuid),
     /* #[error("")]
     ErrorGetting2FACodeFromSecret,
     #[error("Argon2ValidationError({0})")]
@@ -51,8 +53,6 @@ pub enum AuthenticationError {
     Invalid2FASecret,
     #[error("")]
     InvalidInviteToken,
-    #[error("UserNotFound({0})")]
-    UserNotFound(Uuid),
     #[error("AccessDenied({0})")]
     AccessDenied(Uuid),
     #[error("EmailAlreadyExists({0})")]
@@ -242,6 +242,8 @@ pub enum WriteTokenValidationError {
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("BearerTokenPairInvalidFormat")]
+    BearerTokenPairInvalidFormat,
     #[error("AuthFlow({0})")]
     AuthFlow(#[from] AuthFlowError),
     #[error("AccountSetupError({0})")]
