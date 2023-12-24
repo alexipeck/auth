@@ -226,6 +226,21 @@ pub enum ReadTokenValidationError {
 }
 
 #[derive(Error, Debug)]
+pub enum WriteTokenGenerationError {}
+
+#[derive(Error, Debug)]
+pub enum WriteTokenValidationError {
+    #[error("InvalidHeaders")]
+    InvalidHeaders,
+    #[error("NotWriteToken")]
+    NotWriteToken,
+    #[error("UserIDNotMatchCorrespondingReadToken")]
+    UserIDNotMatchCorrespondingRead,
+    #[error("WriteUIDNotMatchReadUID")]
+    WriteUIDNotMatchReadUID,
+}
+
+#[derive(Error, Debug)]
 pub enum Error {
     #[error("AuthFlow({0})")]
     AuthFlow(#[from] AuthFlowError),
@@ -249,6 +264,10 @@ pub enum Error {
     AuthServerBuild(AuthServerBuildError),
     #[error("ReadTokenValidation({0})")]
     ReadTokenValidation(ReadTokenValidationError),
+    #[error("WriteTokenValidation({0})")]
+    WriteTokenValidation(WriteTokenValidationError),
+    #[error("WriteTokenGeneration({0})")]
+    WriteTokenGeneration(WriteTokenGenerationError),
     #[error("ReadTokenAsRefreshToken({0})")]
     ReadTokenAsRefreshToken(ReadTokenAsRefreshTokenError),
     #[error("UserFromModel({0})")]

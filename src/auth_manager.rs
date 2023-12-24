@@ -3,7 +3,7 @@ use crate::{
     database::{establish_connection, get_all_users, save_user, update_user},
     error::{
         AccountSetupError, AuthenticationError, Error, LoginError, ReadTokenAsRefreshTokenError,
-        ReadTokenValidationError, StartupError,
+        ReadTokenValidationError, StartupError, WriteTokenValidationError,
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
@@ -11,8 +11,9 @@ use crate::{
     smtp_manager::SmtpManager,
     token::Token,
     user::{User, UserProfile, UserSafe},
-    user_session::{ReadMode, TokenMode, TokenPair, UserToken},
+    user_session::{ReadInternal, TokenMode, TokenPair, UserToken},
     MAX_SESSION_LIFETIME_SECONDS, READ_LIFETIME_SECONDS, REFRESH_IN_LAST_X_SECONDS,
+    WRITE_LIFETIME_SECONDS,
 };
 use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
@@ -251,7 +252,7 @@ impl AuthManager {
     ) -> Result<TokenPair, Error> {
         self.create_signed_and_encrypted_token_with_lifetime(
             UserToken::new(
-                TokenMode::Read(Box::new(ReadMode::new(
+                TokenMode::Read(Box::new(ReadInternal::new(
                     filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
                         .hash_debug(),
                     Duration::seconds(MAX_SESSION_LIFETIME_SECONDS),
@@ -259,6 +260,43 @@ impl AuthManager {
                 user_id,
             ),
             Duration::seconds(READ_LIFETIME_SECONDS),
+        )
+    }
+
+    pub fn generate_read_and_write_token(
+        &self,
+        headers: &HeaderMap,
+        user_id: Uuid,
+    ) -> Result<(TokenPair, TokenPair), Error> {
+        let read_internal: ReadInternal = ReadInternal::new(
+            filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
+                .hash_debug(),
+            Duration::seconds(MAX_SESSION_LIFETIME_SECONDS),
+        );
+        let write_internal: crate::user_session::WriteInternal =
+            read_internal.generate_write_internal();
+        let read_token: TokenPair = self.create_signed_and_encrypted_token_with_lifetime(
+            UserToken::new(TokenMode::Read(Box::new(read_internal)), user_id),
+            Duration::seconds(READ_LIFETIME_SECONDS),
+        )?;
+        let write_token: TokenPair = self.create_signed_and_encrypted_token_with_lifetime(
+            UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
+            Duration::seconds(WRITE_LIFETIME_SECONDS),
+        )?;
+        Ok((read_token, write_token))
+    }
+
+    pub fn generate_write_token_from_read_token(
+        &self,
+        headers: &HeaderMap,
+        read_token: &str,
+    ) -> Result<TokenPair, Error> {
+        let (user_id, read_internal) = self.validate_read_token(read_token, headers)?;
+        let write_internal: crate::user_session::WriteInternal =
+            read_internal.generate_write_internal();
+        self.create_signed_and_encrypted_token_with_lifetime(
+            UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
+            Duration::seconds(WRITE_LIFETIME_SECONDS),
         )
     }
 
@@ -421,7 +459,11 @@ impl AuthManager {
         };
     }
 
-    pub fn validate_read_token(&self, token: &str, headers: &HeaderMap) -> Result<Uuid, Error> {
+    pub fn validate_read_token(
+        &self,
+        token: &str,
+        headers: &HeaderMap,
+    ) -> Result<(Uuid, ReadInternal), Error> {
         let (user_token, _) = self.verify_and_decrypt::<UserToken>(token)?;
         let (user_id, token_mode) = user_token.extract();
         if let TokenMode::Read(read_mode) = token_mode {
@@ -433,12 +475,48 @@ impl AuthManager {
                     ReadTokenValidationError::InvalidHeaders,
                 ));
             }
+            Ok((user_id, *read_mode))
         } else {
             return Err(Error::ReadTokenValidation(
                 ReadTokenValidationError::NotReadToken,
             ));
         }
-        Ok(user_id)
+    }
+
+    pub fn validate_write_token(
+        &self,
+        read_token: &str,
+        write_token: &str,
+        headers: &HeaderMap,
+    ) -> Result<Uuid, Error> {
+        let (read_user_id, read_internal) = self.validate_read_token(read_token, headers)?;
+        let (user_token, _) = self.verify_and_decrypt::<UserToken>(write_token)?;
+        let (write_user_id, token_mode) = user_token.extract();
+        if read_user_id != write_user_id {
+            return Err(Error::WriteTokenValidation(
+                WriteTokenValidationError::UserIDNotMatchCorrespondingRead,
+            ));
+        }
+        if let TokenMode::Write(write_mode) = token_mode {
+            if write_mode.get_headers_hash()
+                != &filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
+                    .hash_debug()
+            {
+                return Err(Error::WriteTokenValidation(
+                    WriteTokenValidationError::InvalidHeaders,
+                ));
+            }
+            if &write_mode.uid != read_internal.get_uid() {
+                return Err(Error::WriteTokenValidation(
+                    WriteTokenValidationError::WriteUIDNotMatchReadUID,
+                ));
+            }
+        } else {
+            return Err(Error::WriteTokenValidation(
+                WriteTokenValidationError::NotWriteToken,
+            ));
+        }
+        Ok(write_user_id)
     }
 
     pub fn validate_user_credentials(
