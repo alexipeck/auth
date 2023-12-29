@@ -233,6 +233,7 @@ impl Token {
     ) -> Result<(T, DateTime<Utc>), Error> {
         let parts: Vec<&str> = token.split('.').collect();
         if parts.len() != 3 {
+            println!("{:?}", parts);
             return Err(Error::Token(TokenError::InvalidFormatForDecoding));
         }
 
