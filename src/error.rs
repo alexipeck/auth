@@ -17,6 +17,9 @@ impl_error_wrapper!(SmtpTransportError, lettre::transport::smtp::Error);
 impl_error_wrapper!(LettreError, lettre::error::Error);
 impl_error_wrapper!(UuidError, uuid::Error);
 impl_error_wrapper!(DieselResultError, diesel::result::Error);
+impl_error_wrapper!(TomlSerError, toml::ser::Error);
+impl_error_wrapper!(TomlDeError, toml::de::Error);
+impl_error_wrapper!(StdIoError, std::io::Error);
 //impl_error_wrapper!(EmailAddressError, email_address::EmailAddress);
 
 #[derive(Error, Debug)]
@@ -102,7 +105,7 @@ pub enum TokenError {
     #[error("Expired")]
     Expired,
     #[error("MissingExpiry")]
-    MissingExpiry
+    MissingExpiry,
 }
 
 #[derive(Error, Debug)]
@@ -165,6 +168,30 @@ pub enum EncryptionError {
     PublicToPEMConversion(OpenSSLError),
     #[error("PublicPEMBytesToString({0})")]
     PublicPEMBytesToString(Utf8Error),
+    #[error("ConvertSigningPrivateToPEMPKCS8({0})")]
+    ConvertSigningPrivateToPEMPKCS8(OpenSSLError),
+    #[error("ConvertPrivateToPEMPKCS8({0})")]
+    ConvertPrivateToPEMPKCS8(OpenSSLError),
+    #[error("ConvertSigningPublicKeyToPEM({0})")]
+    ConvertSigningPublicKeyToPEM(OpenSSLError),
+    #[error("ConvertPublicKeyToPEM({0})")]
+    ConvertPublicKeyToPEM(OpenSSLError),
+    #[error("ConvertModelToTOML({0})")]
+    ConvertModelToTOML(TomlSerError),
+    #[error("WriteTOMLToFile({0})")]
+    WriteTOMLToFile(StdIoError),
+    #[error("ReadTOMLFromFile({0})")]
+    ReadTOMLFromFile(StdIoError),
+    #[error("ConvertTOMLToModel({0})")]
+    ConvertTOMLToModel(TomlDeError),
+    #[error("SigningPrivateKeyFromPEM({0})")]
+    SigningPrivateKeyFromPEM(OpenSSLError),
+    #[error("SigningPublicKeyFromPEM({0})")]
+    SigningPublicKeyFromPEM(OpenSSLError),
+    #[error("PrivateKeyFromPEM({0})")]
+    PrivateKeyFromPEM(OpenSSLError),
+    #[error("PublicKeyFromPEM({0})")]
+    PublicKeyFromPEM(OpenSSLError),
 }
 
 #[derive(Error, Debug)]

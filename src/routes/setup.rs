@@ -40,7 +40,7 @@ fn validate_invite_token(
     };
     let expiry = match expiry {
         Some(expiry) => expiry,
-        None => return Err(Error::Token(TokenError::MissingExpiry))
+        None => return Err(Error::Token(TokenError::MissingExpiry)),
     };
     let email: EmailAddress = user_invite_instance.get_email().to_owned();
     let two_fa_client_secret: String = user_invite_instance.get_two_fa_client_secret().to_owned();

@@ -3,7 +3,7 @@ use crate::{
     database::{establish_connection, get_all_users, save_user, update_user},
     error::{
         AccountSetupError, AuthenticationError, Error, LoginError, ReadTokenAsRefreshTokenError,
-        ReadTokenValidationError, StartupError, WriteTokenValidationError, TokenError,
+        ReadTokenValidationError, StartupError, TokenError, WriteTokenValidationError,
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
@@ -213,7 +213,7 @@ impl AuthManager {
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
         let key: String = headers.hash_debug();
         let flow: Flow<T> = Flow::new(key, r#type, data);
-        self.create_signed_and_encrypted_token_expiry(flow, expiry)
+        self.create_signed_and_encrypted_token_with_expiry(flow, expiry)
     }
 
     pub fn user_setup_incomplete(&self, user_id: &Uuid) -> Option<bool> {
@@ -285,16 +285,11 @@ impl AuthManager {
         Ok((read_token, write_token))
     }
 
-    pub fn refresh_read_token(
-        &self,
-        token: &str,
-        headers: &HeaderMap,
-    ) -> Result<TokenPair, Error> {
+    pub fn refresh_read_token(&self, token: &str, headers: &HeaderMap) -> Result<TokenPair, Error> {
         let (user_token, existing_expiry) = self.verify_and_decrypt::<UserToken>(token)?;
-        let existing_expiry
-         = match existing_expiry {
+        let existing_expiry = match existing_expiry {
             Some(expiry) => expiry,
-            None => return Err(Error::Token(TokenError::MissingExpiry))
+            None => return Err(Error::Token(TokenError::MissingExpiry)),
         };
         if existing_expiry.expired() {
             return Err(Error::ReadTokenAsRefreshToken(
@@ -320,7 +315,7 @@ impl AuthManager {
 
         let user_token: UserToken = UserToken::new(token_mode, user_id);
 
-        let t = self.create_signed_and_encrypted_token_expiry(user_token, expiry);
+        let t = self.create_signed_and_encrypted_token_with_expiry(user_token, expiry);
         if t.is_ok() {
             info!("Read token refreshed for user {}", user_id);
         }
@@ -338,9 +333,12 @@ impl AuthManager {
         if let Some(user) = self.users.read().get(&user_id) {
             user.validate_two_fa_code(&two_fa_code)?;
         } else {
-            return Err(Error::Authentication(AuthenticationError::UserNotFound(user_id)));
+            return Err(Error::Authentication(AuthenticationError::UserNotFound(
+                user_id,
+            )));
         }
-        let write_internal: crate::user_session::WriteInternal = read_internal.generate_write_internal();
+        let write_internal: crate::user_session::WriteInternal =
+            read_internal.generate_write_internal();
         self.create_signed_and_encrypted_token_with_lifetime(
             UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
             Duration::seconds(WRITE_LIFETIME_SECONDS),
@@ -353,7 +351,8 @@ impl AuthManager {
         token: &String,
         headers: &HeaderMap,
     ) -> Result<(T, Option<DateTime<Utc>>), Error> {
-        let (flow, expiry): (Flow<T>, Option<DateTime<Utc>>) = self.verify_and_decrypt::<Flow<T>>(token)?;
+        let (flow, expiry): (Flow<T>, Option<DateTime<Utc>>) =
+            self.verify_and_decrypt::<Flow<T>>(token)?;
         let headers: std::collections::BTreeMap<String, HeaderValue> =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
 
@@ -392,10 +391,10 @@ impl AuthManager {
         lifetime: Duration,
     ) -> Result<TokenPair, Error> {
         let expiry = Utc::now() + lifetime;
-        self.create_signed_and_encrypted_token_expiry(data, expiry)
+        self.create_signed_and_encrypted_token_with_expiry(data, expiry)
     }
 
-    pub fn create_signed_and_encrypted_token_expiry<T: Serialize + DeserializeOwned>(
+    pub fn create_signed_and_encrypted_token_with_expiry<T: Serialize + DeserializeOwned>(
         &self,
         data: T,
         expiry: DateTime<Utc>,
@@ -411,15 +410,6 @@ impl AuthManager {
             expiry,
         })
     }
-
-    /* pub fn create_signed_and_encrypted_token_with_lifetime<T: Serialize + DeserializeOwned>(
-        &self,
-        data: T,
-        lifetime: Duration,
-    ) -> Result<TokenPair, Error> {
-        let expiry = Utc::now() + lifetime;
-        self.create_signed_and_encrypted_token_with_expiry(data, expiry)
-    } */
 
     pub fn create_signed_and_encrypted_token<T: Serialize + DeserializeOwned>(
         &self,
@@ -515,11 +505,7 @@ impl AuthManager {
         }
     }
 
-    pub fn validate_write_token(
-        &self,
-        token: &str,
-        headers: &HeaderMap,
-    ) -> Result<Uuid, Error> {
+    pub fn validate_write_token(&self, token: &str, headers: &HeaderMap) -> Result<Uuid, Error> {
         let (read_token, write_token) = {
             let t: Vec<&str> = token.split(':').into_iter().collect::<Vec<&str>>();
             if t.len() != 2 {

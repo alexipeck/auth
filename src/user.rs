@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     cryptography::generate_token,
-    error::{AccountSetupError, Error, AuthenticationError},
+    error::{AccountSetupError, AuthenticationError, Error},
     model::UserModel,
     user_session::UserSession,
 };
@@ -108,9 +108,7 @@ impl User {
                 if two_fa_code == current_code {
                     Ok(())
                 } else {
-                    Err(Error::Authentication(
-                        AuthenticationError::Incorrect2FACode,
-                    ))
+                    Err(Error::Authentication(AuthenticationError::Incorrect2FACode))
                 }
             }
             Err(err) => Err(Error::Authentication(
