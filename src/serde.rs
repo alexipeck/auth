@@ -18,3 +18,35 @@ pub mod datetime_utc {
             .with_timezone(&Utc))
     }
 }
+
+pub mod datetime_utc_option {
+    use chrono::{DateTime, Utc};
+    use serde::{self, Deserialize, Deserializer, Serializer, Serialize};
+
+    // Serialize Option<DateTime<Utc>>
+    pub fn serialize<S>(datetime: &Option<DateTime<Utc>>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match datetime {
+            Some(dt) => dt.to_rfc3339().serialize(serializer),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    // Deserialize Option<DateTime<Utc>>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt = Option::<String>::deserialize(deserializer)?;
+        match opt {
+            Some(s) => {
+                let dt = DateTime::parse_from_rfc3339(&s)
+                    .map_err(serde::de::Error::custom)?;
+                Ok(Some(dt.with_timezone(&Utc)))
+            },
+            None => Ok(None),
+        }
+    }
+}

@@ -1,7 +1,7 @@
 use crate::{
     auth_manager::{AuthManager, FlowType},
     cryptography::decrypt_url_safe_base64_with_private_key,
-    error::{AccountSetupError, Error},
+    error::{AccountSetupError, Error, TokenError},
     flows::user_setup::{
         InviteToken, SetupCredentials, UserInvite, UserInviteInstance, UserSetup, UserSetupFlow,
     },
@@ -37,6 +37,10 @@ fn validate_invite_token(
             ));
         }
         (UserInviteInstance::from_user_invite(user_invite), expiry)
+    };
+    let expiry = match expiry {
+        Some(expiry) => expiry,
+        None => return Err(Error::Token(TokenError::MissingExpiry))
     };
     let email: EmailAddress = user_invite_instance.get_email().to_owned();
     let two_fa_client_secret: String = user_invite_instance.get_two_fa_client_secret().to_owned();
@@ -96,7 +100,7 @@ fn setup_user_account(
     headers: &HeaderMap,
     auth_manager: Arc<AuthManager>,
 ) -> Result<(), Error> {
-    let (user_invite_instance, _): (UserInviteInstance, DateTime<Utc>) =
+    let (user_invite_instance, _): (UserInviteInstance, Option<DateTime<Utc>>) =
         auth_manager.verify_flow::<UserInviteInstance>(&user_setup.key, headers)?;
     let user_setup_incomplete: Option<bool> =
         auth_manager.user_setup_incomplete(user_invite_instance.get_user_id());

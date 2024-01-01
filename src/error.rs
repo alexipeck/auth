@@ -101,6 +101,8 @@ pub enum TokenError {
     DataDeserialisation(SerdeError),
     #[error("Expired")]
     Expired,
+    #[error("MissingExpiry")]
+    MissingExpiry
 }
 
 #[derive(Error, Debug)]
