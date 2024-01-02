@@ -1,5 +1,5 @@
-use crate::serde::datetime_utc;
 use chrono::{DateTime, Utc};
+use peck_lib::datetime::serde::datetime_utc;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]

@@ -7,7 +7,6 @@ use crate::{
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
-    r#trait::{Expired, HashDebug},
     smtp_manager::SmtpManager,
     token::Token,
     user::{User, UserProfile, UserSafe},
@@ -19,6 +18,7 @@ use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use parking_lot::RwLock;
+use peck_lib::{datetime::r#trait::Expired, hashing::r#trait::HashDebug};
 use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};

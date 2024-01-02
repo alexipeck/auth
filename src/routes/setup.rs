@@ -5,7 +5,6 @@ use crate::{
     flows::user_setup::{
         InviteToken, SetupCredentials, UserInvite, UserInviteInstance, UserSetup, UserSetupFlow,
     },
-    r#trait::Expired,
     user_session::TokenPair,
 };
 use axum::{
@@ -17,6 +16,7 @@ use axum::{
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use google_authenticator::GoogleAuthenticator;
+use peck_lib::datetime::r#trait::Expired;
 use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
 

@@ -1,11 +1,10 @@
 use axum::http::header::InvalidHeaderValue;
 use email_address::EmailAddress;
 use google_authenticator::GAError;
+use peck_lib::impl_error_wrapper;
 use std::fmt;
 use thiserror::Error;
 use uuid::Uuid;
-
-use crate::impl_error_wrapper;
 
 impl_error_wrapper!(SerdeError, serde_json::error::Error);
 impl_error_wrapper!(OpenSSLError, openssl::error::ErrorStack);
