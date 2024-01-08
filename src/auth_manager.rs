@@ -18,7 +18,9 @@ use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use parking_lot::RwLock;
-use peck_lib::{datetime::r#trait::Expired, hashing::r#trait::HashDebug};
+use peck_lib::{
+    datetime::r#trait::Expired, hashing::r#trait::HashDebug, uid_authority::UIDAuthority,
+};
 use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -145,6 +147,8 @@ pub struct AuthManager {
     pub smtp_manager: SmtpManager,
     pub database_url: String,
     pub port: u16,
+
+    uid_authority: Option<Arc<UIDAuthority>>,
 }
 
 impl AuthManager {
@@ -157,6 +161,7 @@ impl AuthManager {
         smtp_password: String,
         database_url: String,
         port: u16,
+        uid_authority: Option<Arc<UIDAuthority>>,
     ) -> Result<Self, Error> {
         let allowed_origin: HeaderValue = match allowed_origin.parse() {
             Ok(allowed_origin) => allowed_origin,
@@ -186,6 +191,7 @@ impl AuthManager {
             smtp_manager,
             database_url,
             port,
+            uid_authority,
         })
     }
 }
@@ -376,6 +382,9 @@ impl AuthManager {
     }
 
     pub fn generate_user_uid(&self) -> Uuid {
+        if let Some(uid_authority) = self.uid_authority.as_ref() {
+            return uid_authority.generate_uid();
+        }
         loop {
             let uid = Uuid::new_v4();
             if self.users.read().contains_key(&uid) {

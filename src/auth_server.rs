@@ -17,6 +17,7 @@ use axum::{
     Extension, Router,
 };
 use core::fmt;
+use peck_lib::uid_authority::UIDAuthority;
 use std::{
     net::SocketAddr,
     sync::{
@@ -145,11 +146,17 @@ pub struct Builder {
     stop: Option<Arc<AtomicBool>>,
     stop_notify: Option<Arc<Notify>>,
     database_url: Option<String>,
+    uid_authority: Option<Arc<UIDAuthority>>,
 }
 
 impl Builder {
     pub fn cookie_name(mut self, cookie_name: String) -> Self {
         self.cookie_name = Some(cookie_name);
+        self
+    }
+
+    pub fn uid_authority(mut self, uid_authority: Arc<UIDAuthority>) -> Self {
+        self.uid_authority = Some(uid_authority);
         self
     }
 
@@ -242,6 +249,7 @@ impl Builder {
             self.smtp_password.unwrap(),
             self.database_url.unwrap(),
             self.port.unwrap(),
+            self.uid_authority,
         )?;
         let signals = Signals {
             stop: self.stop.unwrap_or(Arc::new(AtomicBool::new(false))),
