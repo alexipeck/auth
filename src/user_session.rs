@@ -123,7 +123,6 @@ pub struct UserToken {
     user_id: Uuid,
     token_mode: TokenMode,
     _salt: Uuid,
-    __salt: Uuid,
 }
 
 impl UserToken {
@@ -132,7 +131,6 @@ impl UserToken {
             user_id,
             token_mode,
             _salt: Uuid::new_v4(),
-            __salt: Uuid::new_v4(),
         }
     }
 
