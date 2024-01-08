@@ -19,6 +19,7 @@ impl_error_wrapper!(DieselResultError, diesel::result::Error);
 impl_error_wrapper!(TomlSerError, toml::ser::Error);
 impl_error_wrapper!(TomlDeError, toml::de::Error);
 impl_error_wrapper!(StdIoError, std::io::Error);
+impl_error_wrapper!(PeckLibError, peck_lib::error::Error);
 //impl_error_wrapper!(EmailAddressError, email_address::EmailAddress);
 
 #[derive(Error, Debug)]
@@ -268,6 +269,12 @@ pub enum WriteTokenValidationError {
     WriteUIDNotMatchReadUID,
 }
 
+impl From<peck_lib::error::Error> for Error {
+    fn from(value: peck_lib::error::Error) -> Self {
+        Error::PeckLib(PeckLibError(value))
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("BearerTokenPairInvalidFormat")]
@@ -304,4 +311,6 @@ pub enum Error {
     UserFromModel(UserFromModelError),
     #[error("Database({0})")]
     Database(DatabaseError),
+    #[error("PeckLib({0})")]
+    PeckLib(PeckLibError),
 }

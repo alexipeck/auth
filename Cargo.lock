@@ -1389,7 +1389,7 @@ dependencies = [
 [[package]]
 name = "peck-lib"
 version = "1.1.1"
-source = "git+https://github.com/alexipeck/peck-lib#f33955e7cccaad0700865f7c0c2d2170868186d9"
+source = "git+https://github.com/alexipeck/peck-lib#74157c8f9096fc04db7d70ec2280fdcff0db2d0e"
 dependencies = [
  "blake3",
  "chrono",

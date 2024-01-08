@@ -168,6 +168,9 @@ impl AuthManager {
             Err(err) => return Err(Error::Startup(StartupError::InvalidOrigin(err.into()))),
         };
         let users = get_all_users(&mut establish_connection(&database_url))?;
+        if let Some(uid_authority) = uid_authority.as_ref() {
+            uid_authority.insert_bulk(users.keys().map(|uid| *uid).collect::<Vec<Uuid>>())?;
+        }
         let email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>> = Arc::new(RwLock::new(
             users
                 .iter()
