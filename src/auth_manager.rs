@@ -3,11 +3,10 @@ use crate::{
     database::{establish_connection, get_all_users, save_user, update_user},
     error::{
         AccountSetupError, AuthenticationError, Error, LoginError, ReadTokenAsRefreshTokenError,
-        ReadTokenValidationError, StartupError, WriteTokenValidationError,
+        ReadTokenValidationError, StartupError, TokenError, WriteTokenValidationError,
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
-    r#trait::{Expired, HashDebug},
     smtp_manager::SmtpManager,
     token::Token,
     user::{User, UserProfile, UserSafe},
@@ -19,6 +18,9 @@ use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use parking_lot::RwLock;
+use peck_lib::{
+    datetime::r#trait::Expired, hashing::r#trait::HashDebug, uid_authority::UIDAuthority,
+};
 use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -145,6 +147,8 @@ pub struct AuthManager {
     pub smtp_manager: SmtpManager,
     pub database_url: String,
     pub port: u16,
+
+    uid_authority: Option<Arc<UIDAuthority>>,
 }
 
 impl AuthManager {
@@ -157,12 +161,16 @@ impl AuthManager {
         smtp_password: String,
         database_url: String,
         port: u16,
+        uid_authority: Option<Arc<UIDAuthority>>,
     ) -> Result<Self, Error> {
         let allowed_origin: HeaderValue = match allowed_origin.parse() {
             Ok(allowed_origin) => allowed_origin,
             Err(err) => return Err(Error::Startup(StartupError::InvalidOrigin(err.into()))),
         };
         let users = get_all_users(&mut establish_connection(&database_url))?;
+        if let Some(uid_authority) = uid_authority.as_ref() {
+            uid_authority.insert_bulk(users.keys().map(|uid| *uid).collect::<Vec<Uuid>>())?;
+        }
         let email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>> = Arc::new(RwLock::new(
             users
                 .iter()
@@ -186,6 +194,7 @@ impl AuthManager {
             smtp_manager,
             database_url,
             port,
+            uid_authority,
         })
     }
 }
@@ -226,7 +235,7 @@ impl AuthManager {
     pub fn verify_and_decrypt<T: Serialize + DeserializeOwned>(
         &self,
         token: &str,
-    ) -> Result<(T, DateTime<Utc>), Error> {
+    ) -> Result<(T, Option<DateTime<Utc>>), Error> {
         Token::verify_and_decrypt::<T>(
             token,
             self.encryption_keys.get_public_signing_key(),
@@ -285,12 +294,12 @@ impl AuthManager {
         Ok((read_token, write_token))
     }
 
-    pub fn refresh_read_token(
-        &self,
-        token: &str,
-        headers: &HeaderMap,
-    ) -> Result<TokenPair, Error> {
+    pub fn refresh_read_token(&self, token: &str, headers: &HeaderMap) -> Result<TokenPair, Error> {
         let (user_token, existing_expiry) = self.verify_and_decrypt::<UserToken>(token)?;
+        let existing_expiry = match existing_expiry {
+            Some(expiry) => expiry,
+            None => return Err(Error::Token(TokenError::MissingExpiry)),
+        };
         if existing_expiry.expired() {
             return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::Expired,
@@ -333,9 +342,12 @@ impl AuthManager {
         if let Some(user) = self.users.read().get(&user_id) {
             user.validate_two_fa_code(&two_fa_code)?;
         } else {
-            return Err(Error::Authentication(AuthenticationError::UserNotFound(user_id)));
+            return Err(Error::Authentication(AuthenticationError::UserNotFound(
+                user_id,
+            )));
         }
-        let write_internal: crate::user_session::WriteInternal = read_internal.generate_write_internal();
+        let write_internal: crate::user_session::WriteInternal =
+            read_internal.generate_write_internal();
         self.create_signed_and_encrypted_token_with_lifetime(
             UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
             Duration::seconds(WRITE_LIFETIME_SECONDS),
@@ -347,8 +359,9 @@ impl AuthManager {
         &self,
         token: &String,
         headers: &HeaderMap,
-    ) -> Result<(T, DateTime<Utc>), Error> {
-        let (flow, expiry): (Flow<T>, DateTime<Utc>) = self.verify_and_decrypt::<Flow<T>>(token)?;
+    ) -> Result<(T, Option<DateTime<Utc>>), Error> {
+        let (flow, expiry): (Flow<T>, Option<DateTime<Utc>>) =
+            self.verify_and_decrypt::<Flow<T>>(token)?;
         let headers: std::collections::BTreeMap<String, HeaderValue> =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
 
@@ -372,6 +385,9 @@ impl AuthManager {
     }
 
     pub fn generate_user_uid(&self) -> Uuid {
+        if let Some(uid_authority) = self.uid_authority.as_ref() {
+            return uid_authority.generate_uid();
+        }
         loop {
             let uid = Uuid::new_v4();
             if self.users.read().contains_key(&uid) {
@@ -396,15 +412,28 @@ impl AuthManager {
         expiry: DateTime<Utc>,
     ) -> Result<TokenPair, Error> {
         Ok(TokenPair {
-            token: Token::create_signed_and_encrypted_expiry(
+            token: Token::create_signed_and_encrypted(
                 data,
-                expiry,
+                Some(expiry),
                 self.encryption_keys.get_private_signing_key(),
                 self.encryption_keys.get_symmetric_key(),
                 self.encryption_keys.get_iv(),
             )?,
             expiry,
         })
+    }
+
+    pub fn create_signed_and_encrypted_token<T: Serialize + DeserializeOwned>(
+        &self,
+        data: T,
+    ) -> Result<String, Error> {
+        Token::create_signed_and_encrypted(
+            data,
+            None,
+            self.encryption_keys.get_private_signing_key(),
+            self.encryption_keys.get_symmetric_key(),
+            self.encryption_keys.get_iv(),
+        )
     }
 
     pub fn invite_user(&self, email: EmailAddress) -> Result<Uuid, Error> {
@@ -488,11 +517,7 @@ impl AuthManager {
         }
     }
 
-    pub fn validate_write_token(
-        &self,
-        token: &str,
-        headers: &HeaderMap,
-    ) -> Result<Uuid, Error> {
+    pub fn validate_write_token(&self, token: &str, headers: &HeaderMap) -> Result<Uuid, Error> {
         let (read_token, write_token) = {
             let t: Vec<&str> = token.split(':').into_iter().collect::<Vec<&str>>();
             if t.len() != 2 {

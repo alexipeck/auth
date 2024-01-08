@@ -1,11 +1,11 @@
 use crate::{
     auth_manager::AuthManager,
     error::{Error, ReadTokenAsRefreshTokenError},
-    serde::datetime_utc,
     MAX_READ_ITERATIONS, READ_LIFETIME_SECONDS,
 };
 use axum::http::HeaderMap;
 use chrono::{DateTime, Duration, Utc};
+use peck_lib::datetime::serde::datetime_utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::debug;
@@ -123,7 +123,6 @@ pub struct UserToken {
     user_id: Uuid,
     token_mode: TokenMode,
     _salt: Uuid,
-    __salt: Uuid,
 }
 
 impl UserToken {
@@ -132,7 +131,6 @@ impl UserToken {
             user_id,
             token_mode,
             _salt: Uuid::new_v4(),
-            __salt: Uuid::new_v4(),
         }
     }
 

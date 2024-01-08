@@ -1,4 +1,4 @@
-use std::str::from_utf8;
+use std::{fs, str::from_utf8};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use openssl::{
@@ -13,7 +13,7 @@ use tracing::warn;
 
 use crate::error::{
     Base64DecodeError, ClientPayloadError, EncryptionError, Error, FromUtf8Error, OpenSSLError,
-    SerdeError, Utf8Error,
+    SerdeError, StdIoError, TomlDeError, TomlSerError, Utf8Error,
 };
 
 pub const TOKEN_CHARSET: [char; 88] = [
@@ -54,6 +54,16 @@ pub fn generate_random_base32_string(length: usize) -> String {
     key
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct EncryptionKeysModel {
+    pub signing_private_key: Vec<u8>,
+    pub signing_public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
+    pub public_key: Vec<u8>,
+    pub symmetric_key: [u8; 32], // 256-bit key for AES-256
+    pub iv: [u8; 16],            // 128-bit IV for AES
+}
+
 pub struct EncryptionKeys {
     signing_private_key: PKey<Private>,
     signing_public_key: PKey<Public>,
@@ -75,6 +85,126 @@ impl EncryptionKeys {
             symmetric_key: rand::thread_rng().gen(),
             iv: rand::thread_rng().gen(),
         })
+    }
+
+    fn from_model(model: EncryptionKeysModel) -> Result<Self, Error> {
+        let signing_private_key = match PKey::private_key_from_pem(&model.signing_private_key) {
+            Ok(signing_private_key) => signing_private_key,
+            Err(err) => {
+                return Err(Error::Encryption(
+                    EncryptionError::SigningPrivateKeyFromPEM(OpenSSLError(err)),
+                ))
+            }
+        };
+        let signing_public_key = match PKey::public_key_from_pem(&model.signing_public_key) {
+            Ok(signing_public_key) => signing_public_key,
+            Err(err) => {
+                return Err(Error::Encryption(EncryptionError::SigningPublicKeyFromPEM(
+                    OpenSSLError(err),
+                )))
+            }
+        };
+        let private_key = match PKey::private_key_from_pem(&model.private_key) {
+            Ok(signing_public_key) => signing_public_key,
+            Err(err) => {
+                return Err(Error::Encryption(EncryptionError::PrivateKeyFromPEM(
+                    OpenSSLError(err),
+                )))
+            }
+        };
+        let public_key = match PKey::public_key_from_pem(&model.public_key) {
+            Ok(signing_public_key) => signing_public_key,
+            Err(err) => {
+                return Err(Error::Encryption(EncryptionError::PublicKeyFromPEM(
+                    OpenSSLError(err),
+                )))
+            }
+        };
+        Ok(Self {
+            signing_private_key,
+            signing_public_key,
+            private_key,
+            public_key,
+            symmetric_key: model.symmetric_key,
+            iv: model.iv,
+        })
+    }
+
+    pub fn save_to_file(&self, path: &str) -> Result<(), Error> {
+        let signing_private_key = match self.signing_private_key.private_key_to_pem_pkcs8() {
+            Ok(signing_private_key) => signing_private_key,
+            Err(err) => {
+                return Err(Error::Encryption(
+                    EncryptionError::ConvertSigningPrivateToPEMPKCS8(OpenSSLError(err)),
+                ))
+            }
+        };
+        let signing_public_key = match self.signing_public_key.public_key_to_pem() {
+            Ok(signing_public_mey) => signing_public_mey,
+            Err(err) => {
+                return Err(Error::Encryption(
+                    EncryptionError::ConvertSigningPublicKeyToPEM(OpenSSLError(err)),
+                ))
+            }
+        };
+        let private_key = match self.private_key.private_key_to_pem_pkcs8() {
+            Ok(private_key) => private_key,
+            Err(err) => {
+                return Err(Error::Encryption(
+                    EncryptionError::ConvertPrivateToPEMPKCS8(OpenSSLError(err)),
+                ))
+            }
+        };
+        let public_key = match self.public_key.public_key_to_pem() {
+            Ok(public_key) => public_key,
+            Err(err) => {
+                return Err(Error::Encryption(EncryptionError::ConvertPublicKeyToPEM(
+                    OpenSSLError(err),
+                )))
+            }
+        };
+        let encryption_keys_model = EncryptionKeysModel {
+            signing_private_key,
+            signing_public_key,
+            private_key,
+            public_key,
+            symmetric_key: self.symmetric_key.to_owned(),
+            iv: self.iv.to_owned(),
+        };
+        let toml_string = match toml::to_string(&encryption_keys_model) {
+            Ok(toml) => toml,
+            Err(err) => {
+                return Err(Error::Encryption(EncryptionError::ConvertModelToTOML(
+                    TomlSerError(err),
+                )))
+            }
+        };
+        if let Err(err) = fs::write(path, toml_string) {
+            return Err(Error::Encryption(EncryptionError::WriteTOMLToFile(
+                StdIoError(err),
+            )));
+        }
+        Ok(())
+    }
+
+    pub fn from_file(path: &str) -> Result<Self, Error> {
+        let toml_string = match fs::read_to_string(path) {
+            Ok(toml_string) => toml_string,
+            Err(err) => {
+                return Err(Error::Encryption(EncryptionError::ReadTOMLFromFile(
+                    StdIoError(err),
+                )))
+            }
+        };
+        let encryption_keys_model = match toml::from_str::<EncryptionKeysModel>(&toml_string) {
+            Ok(encryption_keys_model) => encryption_keys_model,
+            Err(err) => {
+                return Err(Error::Encryption(EncryptionError::ConvertTOMLToModel(
+                    TomlDeError(err),
+                )))
+            }
+        };
+        Self::from_model(encryption_keys_model)
     }
 
     pub fn generate_asymmetric_keys() -> Result<(PKey<Public>, PKey<Private>), Error> {

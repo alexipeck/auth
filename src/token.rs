@@ -1,11 +1,7 @@
 use std::fmt;
 
 use crate::error::Error;
-use crate::serde::datetime_utc;
-use crate::{
-    error::{Base64DecodeError, FromUtf8Error, OpenSSLError, SerdeError, TokenError},
-    r#trait::Expired,
-};
+use crate::error::{Base64DecodeError, FromUtf8Error, OpenSSLError, SerdeError, TokenError};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chrono::{DateTime, Duration, Utc};
 use openssl::{
@@ -14,6 +10,8 @@ use openssl::{
     sign::{Signer, Verifier},
     symm::{decrypt, encrypt, Cipher},
 };
+use peck_lib::datetime::r#trait::Expired;
+use peck_lib::datetime::serde::datetime_utc_option;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tracing::warn;
 use uuid::Uuid;
@@ -58,17 +56,16 @@ impl Header {
 #[derive(Debug, Serialize, Deserialize)]
 struct TokenWrapper<T> {
     pub data: T,
-    #[serde(with = "datetime_utc")]
-    pub expiry: DateTime<Utc>,
+    #[serde(with = "datetime_utc_option")]
+    pub expiry: Option<DateTime<Utc>>,
     pub _salt: Uuid,
-    pub __salt: Uuid,
 }
 
 #[derive(Debug, Clone)]
 pub struct Token {}
 
 impl Token {
-    pub fn create_signed<T: Serialize + DeserializeOwned>(
+    pub fn create_signed_expiry<T: Serialize + DeserializeOwned>(
         data: T,
         expiry: DateTime<Utc>,
         private_signing_key: &PKey<Private>,
@@ -76,9 +73,8 @@ impl Token {
         let serialised_data_base64: String = {
             let data: TokenWrapper<T> = TokenWrapper {
                 data,
-                expiry,
+                expiry: Some(expiry),
                 _salt: Uuid::new_v4(),
-                __salt: Uuid::new_v4(),
             };
             let serialised_data: String = match serde_json::to_string(&data) {
                 Ok(serialised_data) => serialised_data,
@@ -139,17 +135,17 @@ impl Token {
         iv: &[u8],
     ) -> Result<String, Error> {
         let expiry: DateTime<Utc> = Utc::now() + lifetime;
-        Self::create_signed_and_encrypted_expiry(
+        Self::create_signed_and_encrypted(
             data,
-            expiry,
+            Some(expiry),
             private_signing_key,
             symmetric_key,
             iv,
         )
     }
-    pub fn create_signed_and_encrypted_expiry<T: Serialize + DeserializeOwned>(
+    pub fn create_signed_and_encrypted<T: Serialize + DeserializeOwned>(
         data: T,
-        expiry: DateTime<Utc>,
+        expiry: Option<DateTime<Utc>>,
         private_signing_key: &PKey<Private>,
         symmetric_key: &[u8],
         iv: &[u8],
@@ -159,7 +155,6 @@ impl Token {
                 data,
                 expiry,
                 _salt: Uuid::new_v4(),
-                __salt: Uuid::new_v4(),
             };
             let serialised_data: String = match serde_json::to_string(&data) {
                 Ok(serialised_data) => serialised_data,
@@ -224,19 +219,19 @@ impl Token {
             header_base64, encrypted_data_base64, signature_base64
         ))
     }
-
     pub fn verify_and_decrypt<T: Serialize + DeserializeOwned>(
         token: &str,
         public_signing_key: &PKey<Public>,
         symmetric_key: &[u8],
         iv: &[u8],
-    ) -> Result<(T, DateTime<Utc>), Error> {
+    ) -> Result<(T, Option<DateTime<Utc>>), Error> {
         let parts: Vec<&str> = token.split('.').collect();
         if parts.len() != 3 {
             println!("{:?}", parts);
             return Err(Error::Token(TokenError::InvalidFormatForDecoding));
         }
 
+        //Header validation
         {
             let header_str_bytes: Vec<u8> = match URL_SAFE_NO_PAD.decode(parts[0]) {
                 Ok(header_str_bytes) => header_str_bytes,
@@ -257,8 +252,11 @@ impl Token {
             if header.alg != Algorithm::RSASHA256 {
                 return Err(Error::Token(TokenError::HeadedUnexpectedAlgorithm));
             }
+            drop(header);
+            drop(header_str_bytes);
         }
 
+        //Signature verification
         {
             let signature_bytes: Vec<u8> = match URL_SAFE_NO_PAD.decode(parts[2]) {
                 Ok(signature_bytes) => signature_bytes,
@@ -268,7 +266,6 @@ impl Token {
                     )))
                 }
             };
-
             let mut verifier: Verifier<'_> =
                 match Verifier::new(MessageDigest::sha256(), public_signing_key) {
                     Ok(verifier) => verifier,
@@ -278,7 +275,6 @@ impl Token {
                         )
                     }
                 };
-
             if let Err(err) = verifier.update(parts[0].as_bytes()) {
                 return Err(Error::Token(TokenError::FeedVerifier(OpenSSLError(err))).into());
             }
@@ -333,8 +329,10 @@ impl Token {
                 }
             };
 
-        if decrypted_data_struct.expiry.expired() {
-            return Err(Error::Token(TokenError::Expired));
+        if let Some(expiry) = decrypted_data_struct.expiry {
+            if expiry.expired() {
+                return Err(Error::Token(TokenError::Expired));
+            }
         }
 
         Ok((decrypted_data_struct.data, decrypted_data_struct.expiry))

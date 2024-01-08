@@ -1,5 +1,4 @@
 use axum::http::{HeaderMap, HeaderValue};
-use blake3::Hasher;
 use regex::RegexSet;
 use std::collections::BTreeMap;
 
@@ -15,10 +14,8 @@ pub mod model;
 pub mod response;
 pub mod routes;
 pub mod schema;
-pub mod serde;
 pub mod smtp_manager;
 pub mod token;
-pub mod r#trait;
 pub mod user;
 pub mod user_session;
 
@@ -28,13 +25,6 @@ pub const REFRESH_IN_LAST_X_SECONDS: i64 = 60;
 pub const MAX_SESSION_LIFETIME_SECONDS: i64 = 36000;
 pub const MAX_READ_ITERATIONS: u32 =
     (MAX_SESSION_LIFETIME_SECONDS / (READ_LIFETIME_SECONDS - REFRESH_IN_LAST_X_SECONDS)) as u32;
-
-///hashes with blake3
-pub fn hash_string(data: &str) -> String {
-    let mut hasher = Hasher::new();
-    let _ = hasher.update(data.as_bytes());
-    hasher.finalize().to_string()
-}
 
 pub fn filter_headers_into_btreeset(
     headers: &HeaderMap,
