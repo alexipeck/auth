@@ -17,7 +17,7 @@ use axum::{
     Extension, Router,
 };
 use core::fmt;
-use peck_lib::uid_authority::UIDAuthority;
+use peck_lib::uid::authority::UIDAuthority;
 use std::{
     net::SocketAddr,
     sync::{

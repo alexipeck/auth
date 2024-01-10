@@ -1,8 +1,7 @@
 use axum::http::header::InvalidHeaderValue;
 use email_address::EmailAddress;
 use google_authenticator::GAError;
-use peck_lib::impl_error_wrapper;
-use std::fmt;
+use peck_lib::{impl_error_wrapper, uid::error::UIDAuthorityError};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -19,7 +18,6 @@ impl_error_wrapper!(DieselResultError, diesel::result::Error);
 impl_error_wrapper!(TomlSerError, toml::ser::Error);
 impl_error_wrapper!(TomlDeError, toml::de::Error);
 impl_error_wrapper!(StdIoError, std::io::Error);
-impl_error_wrapper!(PeckLibError, peck_lib::error::Error);
 //impl_error_wrapper!(EmailAddressError, email_address::EmailAddress);
 
 #[derive(Error, Debug)]
@@ -269,9 +267,9 @@ pub enum WriteTokenValidationError {
     WriteUIDNotMatchReadUID,
 }
 
-impl From<peck_lib::error::Error> for Error {
-    fn from(value: peck_lib::error::Error) -> Self {
-        Error::PeckLib(PeckLibError(value))
+impl From<UIDAuthorityError> for Error {
+    fn from(value: UIDAuthorityError) -> Self {
+        Error::UIDAuthority(value)
     }
 }
 
@@ -311,6 +309,6 @@ pub enum Error {
     UserFromModel(UserFromModelError),
     #[error("Database({0})")]
     Database(DatabaseError),
-    #[error("PeckLib({0})")]
-    PeckLib(PeckLibError),
+    #[error("UIDAuthority({0})")]
+    UIDAuthority(UIDAuthorityError),
 }

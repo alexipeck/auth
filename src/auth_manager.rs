@@ -19,7 +19,7 @@ use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use parking_lot::RwLock;
 use peck_lib::{
-    datetime::r#trait::Expired, hashing::r#trait::HashDebug, uid_authority::UIDAuthority,
+    datetime::r#trait::Expired, hashing::r#trait::HashDebug, uid::authority::UIDAuthority,
 };
 use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};

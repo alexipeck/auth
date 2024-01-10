@@ -10,7 +10,7 @@ serde_json = { version = "1.0.111" }
 email_address = { version = "0.2.4", features = ["serde_support"]}
 chrono = { version = "0.4.31", features = ["serde"] }
 tokio = { version = "1.35.1", default-features = false, features = ["macros", "net", "rt-multi-thread", "time", "signal"] }
-base64 = "0.21.5"
+base64 = "0.21.6"
 axum = { version = "0.7.3", features = ["http2", "tokio"] }
 axum-extra = { version = "0.9.1", features = ["typed-header"] }
 axum-core = "0.4.2"
@@ -25,7 +25,7 @@ tracing-subscriber = { version = "0.3.18" }
 tracing = "0.1.40"
 directories = "5.0.1"
 regex = "1.10.2"
-rust-argon2 = "2.0.0"
+rust-argon2 = "2.1.0"
 google-authenticator = "0.4.2"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
