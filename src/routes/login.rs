@@ -59,7 +59,7 @@ fn login_with_credentials(
         credentials.two_fa_code,
     )?;
     let user_session =
-        UserSession::create_from_user_id(user_profile.user_id, headers, auth_manager)?;
+        UserSession::create_from_user_id(user_profile.user_id, headers, auth_manager.to_owned())?;
     info!(
         "User authenticated: ({}, {}, {})",
         user_profile.display_name, user_profile.email, user_profile.user_id

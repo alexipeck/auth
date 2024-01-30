@@ -25,6 +25,7 @@ pub struct TokenPair {
 pub struct UserSession {
     read: TokenPair,
     write: TokenPair,
+    instance_id: Uuid,
 }
 
 impl UserSession {
@@ -35,7 +36,11 @@ impl UserSession {
     ) -> Result<Self, Error> {
         let (read, write): (TokenPair, TokenPair) =
             auth_manager.generate_read_and_write_token(&headers, user_id)?;
-        Ok(Self { read, write })
+        Ok(Self {
+            read,
+            write,
+            instance_id: auth_manager.generate_instance_id(),
+        })
     }
 }
 

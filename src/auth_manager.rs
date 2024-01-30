@@ -384,6 +384,16 @@ impl AuthManager {
         self.email_to_id_registry.read().get(email).cloned()
     }
 
+    ///generates UUIDv4, if a UIDAuthority is available, this is guaranteed unique, otherwise is just generated using Uuid::new_v4()
+    pub fn generate_instance_id(&self) -> Uuid {
+        if let Some(uid_authority) = self.uid_authority.as_ref() {
+            return uid_authority.generate_uid();
+        }
+        Uuid::new_v4()
+    }
+
+    ///generates UUIDv4, if a UIDAuthority is available, this is guaranteed globally unique across everything which utilises
+    ///the authority for generation, otherwise is guaranteed unique across all currently registered users
     pub fn generate_user_uid(&self) -> Uuid {
         if let Some(uid_authority) = self.uid_authority.as_ref() {
             return uid_authority.generate_uid();

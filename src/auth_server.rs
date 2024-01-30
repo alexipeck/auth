@@ -1,9 +1,9 @@
 use crate::{
     auth_manager::AuthManager,
-    base::debug_route,
     error::{AuthServerBuildError, Error},
     routes::{
         authenticated::{get_write_token_route, refresh_read_token_route},
+        debug_route,
         login::{init_login_flow_route, login_with_credentials_route},
         setup::{setup_user_account_route, validate_invite_token_route},
     },

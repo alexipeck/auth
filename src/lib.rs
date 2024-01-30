@@ -4,8 +4,6 @@ use std::collections::BTreeMap;
 
 pub mod auth_manager;
 pub mod auth_server;
-#[path = "./routes/base.rs"]
-pub mod base;
 pub mod cryptography;
 pub mod database;
 pub mod error;
