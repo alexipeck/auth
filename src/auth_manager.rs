@@ -256,6 +256,7 @@ impl AuthManager {
     pub fn generate_read_token(
         &self,
         headers: &HeaderMap,
+        session_id: Uuid,
         user_id: Uuid,
     ) -> Result<TokenPair, Error> {
         self.create_signed_and_encrypted_token_with_lifetime(
@@ -263,6 +264,7 @@ impl AuthManager {
                 TokenMode::Read(Box::new(ReadInternal::new(
                     filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
                         .hash_debug(),
+                    session_id,
                     Duration::seconds(MAX_SESSION_LIFETIME_SECONDS),
                 ))),
                 user_id,
@@ -274,11 +276,13 @@ impl AuthManager {
     pub fn generate_read_and_write_token(
         &self,
         headers: &HeaderMap,
+        session_id: Uuid,
         user_id: Uuid,
     ) -> Result<(TokenPair, TokenPair), Error> {
         let read_internal: ReadInternal = ReadInternal::new(
             filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
                 .hash_debug(),
+            session_id,
             Duration::seconds(MAX_SESSION_LIFETIME_SECONDS),
         );
         let write_internal: crate::user_session::WriteInternal =
@@ -385,7 +389,7 @@ impl AuthManager {
     }
 
     ///generates UUIDv4, if a UIDAuthority is available, this is guaranteed unique, otherwise is just generated using Uuid::new_v4()
-    pub fn generate_instance_id(&self) -> Uuid {
+    pub fn generate_session_id(&self) -> Uuid {
         if let Some(uid_authority) = self.uid_authority.as_ref() {
             return uid_authority.generate_uid();
         }
@@ -552,7 +556,7 @@ impl AuthManager {
                     WriteTokenValidationError::InvalidHeaders,
                 ));
             }
-            if &write_mode.uid != read_internal.get_uid() {
+            if write_mode.get_session_id() != read_internal.get_session_id() {
                 return Err(Error::WriteTokenValidation(
                     WriteTokenValidationError::WriteUIDNotMatchReadUID,
                 ));

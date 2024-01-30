@@ -25,7 +25,7 @@ pub struct TokenPair {
 pub struct UserSession {
     read: TokenPair,
     write: TokenPair,
-    instance_id: Uuid,
+    session_id: Uuid,
 }
 
 impl UserSession {
@@ -34,32 +34,42 @@ impl UserSession {
         headers: HeaderMap,
         auth_manager: Arc<AuthManager>,
     ) -> Result<Self, Error> {
+        let session_id = auth_manager.generate_session_id();
         let (read, write): (TokenPair, TokenPair) =
-            auth_manager.generate_read_and_write_token(&headers, user_id)?;
+            auth_manager.generate_read_and_write_token(&headers, session_id, user_id)?;
         Ok(Self {
             read,
             write,
-            instance_id: auth_manager.generate_instance_id(),
+            session_id,
         })
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WriteInternal {
-    pub headers_hash: String,
-    pub uid: Uuid,
+    headers_hash: String,
+    session_id: Uuid,
 }
 
 impl WriteInternal {
+    pub fn new(headers_hash: String, session_id: Uuid) -> Self {
+        Self {
+            headers_hash,
+            session_id,
+        }
+    }
     pub fn get_headers_hash(&self) -> &String {
         &self.headers_hash
+    }
+    pub fn get_session_id(&self) -> &Uuid {
+        &self.session_id
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReadInternal {
     headers_hash: String,
-    uid: Uuid,
+    session_id: Uuid,
     iteration: u32,
     session_start: DateTime<Utc>,
     iteration_limit: u32,
@@ -67,24 +77,24 @@ pub struct ReadInternal {
 }
 
 impl ReadInternal {
-    pub fn new(headers_hash: String, max_lifetime: Duration) -> Self {
+    pub fn new(headers_hash: String, session_id: Uuid, max_lifetime: Duration) -> Self {
         let session_start: DateTime<Utc> = Utc::now();
         Self {
             headers_hash,
-            uid: Uuid::new_v4(),
+            session_id,
             iteration: 0,
             session_start,
             iteration_limit: MAX_READ_ITERATIONS,
             latest_expiry: session_start + max_lifetime,
         }
     }
-    pub fn get_uid(&self) -> &Uuid {
-        &self.uid
+    pub fn get_session_id(&self) -> &Uuid {
+        &self.session_id
     }
     pub fn generate_write_internal(&self) -> WriteInternal {
         WriteInternal {
             headers_hash: self.headers_hash.to_owned(),
-            uid: self.uid,
+            session_id: self.session_id,
         }
     }
     pub fn upgrade(&mut self, headers_hash: &String) -> Result<DateTime<Utc>, Error> {
@@ -127,7 +137,6 @@ pub enum TokenMode {
 pub struct UserToken {
     user_id: Uuid,
     token_mode: TokenMode,
-    _salt: Uuid,
 }
 
 impl UserToken {
@@ -135,7 +144,6 @@ impl UserToken {
         Self {
             user_id,
             token_mode,
-            _salt: Uuid::new_v4(),
         }
     }
 
