@@ -17,13 +17,13 @@ use crate::{
 use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
-use parking_lot::RwLock;
 use peck_lib::{
     datetime::r#trait::Expired, hashing::r#trait::HashDebug, uid::authority::UIDAuthority,
 };
 use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
+use tokio::sync::RwLock;
 use tracing::info;
 use uuid::Uuid;
 
@@ -152,7 +152,7 @@ pub struct AuthManager {
 }
 
 impl AuthManager {
-    pub fn new(
+    pub async fn new(
         cookie_name: String,
         allowed_origin: String,
         smtp_server: String,
@@ -169,7 +169,9 @@ impl AuthManager {
         };
         let users = get_all_users(&mut establish_connection(&database_url))?;
         if let Some(uid_authority) = uid_authority.as_ref() {
-            uid_authority.insert_bulk(users.keys().map(|uid| *uid).collect::<Vec<Uuid>>())?;
+            uid_authority
+                .insert_bulk(users.keys().map(|uid| *uid).collect::<Vec<Uuid>>())
+                .await?;
         }
         let email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>> = Arc::new(RwLock::new(
             users
@@ -225,8 +227,8 @@ impl AuthManager {
         self.create_signed_and_encrypted_token_with_expiry(flow, expiry)
     }
 
-    pub fn user_setup_incomplete(&self, user_id: &Uuid) -> Option<bool> {
-        if let Some(user) = self.users.read().get(user_id) {
+    pub async fn user_setup_incomplete(&self, user_id: &Uuid) -> Option<bool> {
+        if let Some(user) = self.users.read().await.get(user_id) {
             return Some(user.incomplete());
         }
         None
@@ -244,8 +246,8 @@ impl AuthManager {
         )
     }
 
-    pub fn email_exists(&self, email: &EmailAddress) -> bool {
-        for (_, user) in self.users.read().iter() {
+    pub async fn email_exists(&self, email: &EmailAddress) -> bool {
+        for (_, user) in self.users.read().await.iter() {
             if user.get_email() == email {
                 return true;
             }
@@ -336,14 +338,14 @@ impl AuthManager {
         //TODO: Add requirement for minimum number of expected headers to be present to prevent clients sending minimal headers
     }
 
-    pub fn generate_write_token(
+    pub async fn generate_write_token(
         &self,
         read_token: &str,
         two_fa_code: String,
         headers: &HeaderMap,
     ) -> Result<TokenPair, Error> {
         let (user_id, read_internal) = self.validate_read_token(read_token, headers)?;
-        if let Some(user) = self.users.read().get(&user_id) {
+        if let Some(user) = self.users.read().await.get(&user_id) {
             user.validate_two_fa_code(&two_fa_code)?;
         } else {
             return Err(Error::Authentication(AuthenticationError::UserNotFound(
@@ -376,35 +378,36 @@ impl AuthManager {
         Ok((flow.data, expiry))
     }
 
-    pub fn get_users_safe(&self) -> HashMap<Uuid, UserSafe> {
+    pub async fn get_users_safe(&self) -> HashMap<Uuid, UserSafe> {
         self.users
             .read()
+            .await
             .iter()
             .map(|(user_id, user)| (*user_id, user.to_safe()))
             .collect::<HashMap<Uuid, UserSafe>>()
     }
 
-    pub fn get_user_id_from_email(&self, email: &EmailAddress) -> Option<Uuid> {
-        self.email_to_id_registry.read().get(email).cloned()
+    pub async fn get_user_id_from_email(&self, email: &EmailAddress) -> Option<Uuid> {
+        self.email_to_id_registry.read().await.get(email).cloned()
     }
 
     ///generates UUIDv4, if a UIDAuthority is available, this is guaranteed unique, otherwise is just generated using Uuid::new_v4()
-    pub fn generate_session_id(&self) -> Uuid {
+    pub async fn generate_session_id(&self) -> Uuid {
         if let Some(uid_authority) = self.uid_authority.as_ref() {
-            return uid_authority.generate_uid();
+            return uid_authority.generate_uid().await;
         }
         Uuid::new_v4()
     }
 
     ///generates UUIDv4, if a UIDAuthority is available, this is guaranteed globally unique across everything which utilises
     ///the authority for generation, otherwise is guaranteed unique across all currently registered users
-    pub fn generate_user_uid(&self) -> Uuid {
+    pub async fn generate_user_uid(&self) -> Uuid {
         if let Some(uid_authority) = self.uid_authority.as_ref() {
-            return uid_authority.generate_uid();
+            return uid_authority.generate_uid().await;
         }
         loop {
             let uid = Uuid::new_v4();
-            if self.users.read().contains_key(&uid) {
+            if self.users.read().await.contains_key(&uid) {
                 continue;
             }
             return uid;
@@ -450,8 +453,8 @@ impl AuthManager {
         )
     }
 
-    pub fn invite_user(&self, email: EmailAddress) -> Result<Uuid, Error> {
-        let user_id: Uuid = self.generate_user_uid();
+    pub async fn invite_user(&self, email: EmailAddress) -> Result<Uuid, Error> {
+        let user_id: Uuid = self.generate_user_uid().await;
         let user: User = User::new(
             user_id,
             String::new(),
@@ -466,8 +469,11 @@ impl AuthManager {
         if let Err(err) = save_user(&mut establish_connection(&self.database_url), &user) {
             panic!("{}", err);
         }
-        let _ = self.users.write().insert(user_id, user);
-        self.email_to_id_registry.write().insert(email, user_id);
+        let _ = self.users.write().await.insert(user_id, user);
+        self.email_to_id_registry
+            .write()
+            .await
+            .insert(email, user_id);
         self.smtp_manager.send_email_to_recipient(
             "alexinicolaspeck@gmail.com".into(),
             "Invite Link".into(),
@@ -479,14 +485,14 @@ impl AuthManager {
         Ok(user_id)
     }
 
-    pub fn setup_user(
+    pub async fn setup_user(
         &self,
         email: &EmailAddress,
         password: String,
         display_name: String,
         two_fa_client_secret: String,
     ) -> Result<(), Error> {
-        let user_id: Uuid = match self.get_user_id_from_email(email) {
+        let user_id: Uuid = match self.get_user_id_from_email(email).await {
             Some(user_id) => user_id,
             None => {
                 return Err(Error::AccountSetup(
@@ -494,7 +500,7 @@ impl AuthManager {
                 ))
             }
         };
-        return if let Some(user) = self.users.write().get_mut(&user_id) {
+        return if let Some(user) = self.users.write().await.get_mut(&user_id) {
             user.setup_user(password, display_name, two_fa_client_secret)?;
             if let Err(err) = update_user(&mut establish_connection(&self.database_url), user) {
                 panic!("{}", err);
@@ -569,14 +575,14 @@ impl AuthManager {
         Ok(write_user_id)
     }
 
-    pub fn validate_user_credentials(
+    pub async fn validate_user_credentials(
         &self,
         email: &EmailAddress,
         password: &String,
         two_fa_code: String,
     ) -> Result<UserProfile, Error> {
-        match self.email_to_id_registry.read().get(email) {
-            Some(user_id) => match self.users.read().get(user_id) {
+        match self.email_to_id_registry.read().await.get(email) {
+            Some(user_id) => match self.users.read().await.get(user_id) {
                 Some(user) => {
                     if user.incomplete() {
                         return Err(Error::Authentication(

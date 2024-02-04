@@ -250,7 +250,8 @@ impl Builder {
             self.database_url.unwrap(),
             self.port.unwrap(),
             self.uid_authority,
-        )?;
+        )
+        .await?;
         let signals = Signals {
             stop: self.stop.unwrap_or(Arc::new(AtomicBool::new(false))),
             stop_notify: self.stop_notify.unwrap_or(Arc::new(Notify::new())),

@@ -29,12 +29,12 @@ pub struct UserSession {
 }
 
 impl UserSession {
-    pub fn create_from_user_id(
+    pub async fn create_from_user_id(
         user_id: Uuid,
         headers: HeaderMap,
         auth_manager: Arc<AuthManager>,
     ) -> Result<Self, Error> {
-        let session_id = auth_manager.generate_session_id();
+        let session_id = auth_manager.generate_session_id().await;
         let (read, write): (TokenPair, TokenPair) =
             auth_manager.generate_read_and_write_token(&headers, session_id, user_id)?;
         Ok(Self {

@@ -35,7 +35,10 @@ pub async fn get_write_token_route(
     TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
     axum::response::Json(two_fa_code): axum::response::Json<String>,
 ) -> impl IntoResponse {
-    match auth_manager.generate_write_token(authorisation.token(), two_fa_code, &headers) {
+    match auth_manager
+        .generate_write_token(authorisation.token(), two_fa_code, &headers)
+        .await
+    {
         Ok(token_pair) => (StatusCode::OK, Json(token_pair)).into_response(),
         Err(err) => {
             //TODO: Split out into actual correct errors

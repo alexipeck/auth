@@ -58,6 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Err(err) = auth_server
         .auth_manager
         .invite_user(EmailAddress::new_unchecked("alexinicolaspeck@gmail.com"))
+        .await
     {
         warn!("{}", err);
     }

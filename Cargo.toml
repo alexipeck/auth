@@ -17,7 +17,6 @@ axum-core = "0.4.3"
 tower-http = { version = "0.5.1", features = ["cors", "trace"]}
 uuid = { version = "1.7.0", features = ["v4", "serde"] }#1.6.1
 blake3 = "1.5.0"
-parking_lot = "0.12.1"
 cookie = "0.18.0"
 thiserror = "1.0.56"
 tracing-appender = "0.2.3"
@@ -36,4 +35,4 @@ diesel = { version = "2.1.4", default-features = false, features = ["sqlite", "e
 diesel_migrations = "2.1.0"
 libsqlite3-sys = { version = ">=0.17.2, <0.27.0", features = ["bundled"] }
 toml = "0.8.8"
-peck-lib = { git = "https://github.com/alexipeck/peck-lib" }
+peck-lib = { git = "https://github.com/alexipeck/peck-lib", features = ["datetime", "hashing", "uid"] }

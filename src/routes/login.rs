@@ -43,7 +43,7 @@ pub async fn init_login_flow_route(
     }
 }
 
-fn login_with_credentials(
+async fn login_with_credentials(
     user_login: UserLogin,
     headers: HeaderMap,
     auth_manager: Arc<AuthManager>,
@@ -53,13 +53,16 @@ fn login_with_credentials(
         user_login.encrypted_credentials,
         &auth_manager.encryption_keys.get_private_decryption_key(),
     )?;
-    let user_profile = auth_manager.validate_user_credentials(
-        &credentials.email,
-        &credentials.password,
-        credentials.two_fa_code,
-    )?;
+    let user_profile = auth_manager
+        .validate_user_credentials(
+            &credentials.email,
+            &credentials.password,
+            credentials.two_fa_code,
+        )
+        .await?;
     let user_session =
-        UserSession::create_from_user_id(user_profile.user_id, headers, auth_manager.to_owned())?;
+        UserSession::create_from_user_id(user_profile.user_id, headers, auth_manager.to_owned())
+            .await?;
     info!(
         "User authenticated: ({}, {}, {})",
         user_profile.display_name, user_profile.email, user_profile.user_id
@@ -76,7 +79,7 @@ pub async fn login_with_credentials_route(
     headers: HeaderMap,
     axum::response::Json(user_login): axum::response::Json<UserLogin>,
 ) -> impl IntoResponse {
-    match login_with_credentials(user_login, headers, auth_manager) {
+    match login_with_credentials(user_login, headers, auth_manager).await {
         Ok(client_state) => (StatusCode::OK, Json(client_state)).into_response(),
         Err(err) => {
             warn!("{}", err);
