@@ -1,7 +1,6 @@
 use crate::{
     auth_manager::AuthManager,
     error::{Error, ReadTokenAsRefreshTokenError},
-    MAX_READ_ITERATIONS, READ_LIFETIME_SECONDS,
 };
 use axum::http::HeaderMap;
 use chrono::{DateTime, Duration, Utc};
@@ -77,14 +76,19 @@ pub struct ReadInternal {
 }
 
 impl ReadInternal {
-    pub fn new(headers_hash: String, session_id: Uuid, max_lifetime: Duration) -> Self {
+    pub fn new(
+        headers_hash: String,
+        session_id: Uuid,
+        max_lifetime: Duration,
+        iteration_limit: u32,
+    ) -> Self {
         let session_start: DateTime<Utc> = Utc::now();
         Self {
             headers_hash,
             session_id,
             iteration: 0,
             session_start,
-            iteration_limit: MAX_READ_ITERATIONS,
+            iteration_limit,
             latest_expiry: session_start + max_lifetime,
         }
     }
@@ -97,7 +101,11 @@ impl ReadInternal {
             session_id: self.session_id,
         }
     }
-    pub fn upgrade(&mut self, headers_hash: &String) -> Result<DateTime<Utc>, Error> {
+    pub fn upgrade(
+        &mut self,
+        headers_hash: &String,
+        read_lifetime_seconds: i64,
+    ) -> Result<DateTime<Utc>, Error> {
         if &self.headers_hash != headers_hash {
             return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::InvalidHeaders,
@@ -111,7 +119,7 @@ impl ReadInternal {
         }
         let expiry: DateTime<Utc> = {
             let proposed_expiry: DateTime<Utc> =
-                Utc::now() + Duration::seconds(READ_LIFETIME_SECONDS);
+                Utc::now() + Duration::seconds(read_lifetime_seconds);
             if proposed_expiry > self.latest_expiry {
                 debug!("Read token expiry truncated to latest_expiry");
                 self.latest_expiry

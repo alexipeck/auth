@@ -11,8 +11,7 @@ use crate::{
     token::Token,
     user::{User, UserProfile, UserSafe},
     user_session::{ReadInternal, TokenMode, TokenPair, UserToken},
-    MAX_SESSION_LIFETIME_SECONDS, READ_LIFETIME_SECONDS, REFRESH_IN_LAST_X_SECONDS,
-    WRITE_LIFETIME_SECONDS,
+    DEFAULT_REFRESH_IN_LAST_X_SECONDS,
 };
 use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
@@ -148,6 +147,12 @@ pub struct AuthManager {
     pub database_url: String,
     pub port: u16,
 
+    write_lifetime_seconds: i64,       //300
+    read_lifetime_seconds: i64,        //900
+    refresh_in_last_x_seconds: i64,    //60
+    max_session_lifetime_seconds: i64, //36000
+    max_read_iterations: u32,
+
     uid_authority: Option<Arc<UIDAuthority>>,
 }
 
@@ -162,6 +167,9 @@ impl AuthManager {
         database_url: String,
         port: u16,
         uid_authority: Option<Arc<UIDAuthority>>,
+        read_lifetime_seconds: i64,
+        write_lifetime_seconds: i64,
+        max_session_lifetime_seconds: i64,
     ) -> Result<Self, Error> {
         let allowed_origin: HeaderValue = match allowed_origin.parse() {
             Ok(allowed_origin) => allowed_origin,
@@ -187,6 +195,7 @@ impl AuthManager {
             smtp_username,
             smtp_password,
         )?;
+
         Ok(Self {
             users,
             email_to_id_registry,
@@ -197,6 +206,13 @@ impl AuthManager {
             database_url,
             port,
             uid_authority,
+            write_lifetime_seconds,
+            read_lifetime_seconds,
+            refresh_in_last_x_seconds: DEFAULT_REFRESH_IN_LAST_X_SECONDS,
+            max_session_lifetime_seconds,
+            max_read_iterations: (max_session_lifetime_seconds
+                / (read_lifetime_seconds - DEFAULT_REFRESH_IN_LAST_X_SECONDS))
+                as u32,
         })
     }
 }
@@ -267,11 +283,12 @@ impl AuthManager {
                     filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
                         .hash_debug(),
                     session_id,
-                    Duration::seconds(MAX_SESSION_LIFETIME_SECONDS),
+                    Duration::seconds(self.max_session_lifetime_seconds),
+                    self.max_read_iterations,
                 ))),
                 user_id,
             ),
-            Duration::seconds(READ_LIFETIME_SECONDS),
+            Duration::seconds(self.read_lifetime_seconds),
         )
     }
 
@@ -285,17 +302,18 @@ impl AuthManager {
             filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
                 .hash_debug(),
             session_id,
-            Duration::seconds(MAX_SESSION_LIFETIME_SECONDS),
+            Duration::seconds(self.max_session_lifetime_seconds),
+            self.max_read_iterations,
         );
         let write_internal: crate::user_session::WriteInternal =
             read_internal.generate_write_internal();
         let read_token: TokenPair = self.create_signed_and_encrypted_token_with_lifetime(
             UserToken::new(TokenMode::Read(Box::new(read_internal)), user_id),
-            Duration::seconds(READ_LIFETIME_SECONDS),
+            Duration::seconds(self.read_lifetime_seconds),
         )?;
         let write_token: TokenPair = self.create_signed_and_encrypted_token_with_lifetime(
             UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
-            Duration::seconds(WRITE_LIFETIME_SECONDS),
+            Duration::seconds(self.write_lifetime_seconds),
         )?;
         Ok((read_token, write_token))
     }
@@ -310,7 +328,9 @@ impl AuthManager {
             return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::Expired,
             ));
-        } else if existing_expiry.timestamp() - Utc::now().timestamp() > REFRESH_IN_LAST_X_SECONDS {
+        } else if existing_expiry.timestamp() - Utc::now().timestamp()
+            > self.refresh_in_last_x_seconds
+        {
             return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::NotUsedWithinValidRefreshPeriod,
             ));
@@ -321,6 +341,7 @@ impl AuthManager {
             expiry = read_mode.upgrade(
                 &filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
                     .hash_debug(),
+                self.max_session_lifetime_seconds,
             )?;
         } else {
             return Err(Error::ReadTokenAsRefreshToken(
@@ -356,7 +377,7 @@ impl AuthManager {
             read_internal.generate_write_internal();
         self.create_signed_and_encrypted_token_with_lifetime(
             UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
-            Duration::seconds(WRITE_LIFETIME_SECONDS),
+            Duration::seconds(self.write_lifetime_seconds),
         )
         //TODO: Add requirement for minimum number of expected headers to be present to prevent clients sending minimal headers
     }

@@ -7,6 +7,8 @@ use crate::{
         login::{init_login_flow_route, login_with_credentials_route},
         setup::{setup_user_account_route, validate_invite_token_route},
     },
+    DEFAULT_MAX_SESSION_LIFETIME_SECONDS, DEFAULT_READ_LIFETIME_SECONDS,
+    DEFAULT_WRITE_LIFETIME_SECONDS,
 };
 use axum::{
     http::{
@@ -147,6 +149,9 @@ pub struct Builder {
     stop_notify: Option<Arc<Notify>>,
     database_url: Option<String>,
     uid_authority: Option<Arc<UIDAuthority>>,
+    read_lifetime_seconds: Option<i64>,
+    write_lifetime_seconds: Option<i64>,
+    max_session_lifetime_seconds: Option<i64>,
 }
 
 impl Builder {
@@ -205,6 +210,21 @@ impl Builder {
         self
     }
 
+    pub fn read_lifetime_seconds(mut self, lifetime: i64) -> Self {
+        self.read_lifetime_seconds = Some(lifetime);
+        self
+    }
+
+    pub fn write_lifetime_seconds(mut self, lifetime: i64) -> Self {
+        self.write_lifetime_seconds = Some(lifetime);
+        self
+    }
+
+    pub fn max_session_lifetime_seconds(mut self, lifetime: i64) -> Self {
+        self.max_session_lifetime_seconds = Some(lifetime);
+        self
+    }
+
     pub async fn start_server(self) -> Result<Arc<AuthServer>, Error> {
         let mut missing_properties: Vec<RequiredProperties> = Vec::new();
         if self.cookie_name.is_none() {
@@ -240,6 +260,17 @@ impl Builder {
                 .into(),
             );
         }
+
+        let read_lifetime_seconds = self
+            .read_lifetime_seconds
+            .unwrap_or(DEFAULT_READ_LIFETIME_SECONDS);
+        let write_lifetime_seconds = self
+            .write_lifetime_seconds
+            .unwrap_or(DEFAULT_WRITE_LIFETIME_SECONDS);
+        let max_session_lifetime_seconds = self
+            .max_session_lifetime_seconds
+            .unwrap_or(DEFAULT_MAX_SESSION_LIFETIME_SECONDS);
+
         let auth_manager: AuthManager = AuthManager::new(
             self.cookie_name.unwrap(),
             self.allowed_origin.unwrap(),
@@ -250,6 +281,9 @@ impl Builder {
             self.database_url.unwrap(),
             self.port.unwrap(),
             self.uid_authority,
+            read_lifetime_seconds,
+            write_lifetime_seconds,
+            max_session_lifetime_seconds,
         )
         .await?;
         let signals = Signals {
