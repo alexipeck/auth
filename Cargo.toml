@@ -1,38 +1,38 @@
 [package]
-name = "auth"
-version = "0.1.8"
-edition = "2021"
 authors = ["Alexi Peck <alexinicolaspeck@gmail.com>"]
+edition = "2021"
+name = "auth"
+version = "0.1.9"
 
 [dependencies]
-serde = { version = "1.0.196", features = ["derive"] }
-serde_json = { version = "1.0.113" }
-email_address = { version = "0.2.4", features = ["serde_support"]}
-chrono = { version = "0.4.33", features = ["serde"] }
-tokio = { version = "1.35.1", default-features = false, features = ["macros", "net", "rt-multi-thread", "time", "signal"] }
-base64 = "0.21.7"
-axum = { version = "0.7.4", features = ["http2", "tokio"] }
-axum-extra = { version = "0.9.2", features = ["typed-header"] }
+axum = {version = "0.7.4", features = ["http2", "tokio"]}
 axum-core = "0.4.3"
-tower-http = { version = "0.5.1", features = ["cors", "trace"]}
-uuid = { version = "1.7.0", features = ["v4", "serde"] }#1.6.1
-blake3 = "1.5.0"
+axum-extra = {version = "0.9.2", features = ["typed-header"]}
+base64 = "0.22.0"
+blake3 = "1.5.1"
+chrono = {version = "0.4.35", features = ["serde"]}
 cookie = "0.18.0"
-thiserror = "1.0.56"
-tracing-appender = "0.2.3"
-tracing-subscriber = { version = "0.3.18" }
-tracing = "0.1.40"
+diesel = {version = "2.1.5", default-features = false, features = ["sqlite", "extras", "32-column-tables", "r2d2"]}
+diesel_migrations = "2.1.0"
 directories = "5.0.1"
-regex = "1.10.3"
-rust-argon2 = "2.1.0"
+email_address = {version = "0.2.4", features = ["serde_support"]}
 google-authenticator = "0.4.2"
+lettre = "0.11.4"
+libsqlite3-sys = {version = ">=0.17.2, <0.27.0", features = ["bundled"]}
+openssl = {version = "0.10.64", features = ["vendored"]}
+peck-lib = {git = "https://github.com/alexipeck/peck-lib", features = ["datetime", "hashing", "uid", "crypto"]}
 rand = "0.8.5"
 rand_chacha = "0.3.1"
-rand_core = { version = "0.6.4", features = ["getrandom"] }
-openssl = { version = "0.10.63", features = ["vendored"] }
-lettre = "0.11.4"
-diesel = { version = "2.1.4", default-features = false, features = ["sqlite", "extras", "32-column-tables", "r2d2"] }
-diesel_migrations = "2.1.0"
-libsqlite3-sys = { version = ">=0.17.2, <0.27.0", features = ["bundled"] }
-toml = "0.8.8"
-peck-lib = { git = "https://github.com/alexipeck/peck-lib", features = ["datetime", "hashing", "uid"] }
+rand_core = {version = "0.6.4", features = ["getrandom"]}
+regex = "1.10.3"
+rust-argon2 = "2.1.0"
+serde = {version = "1.0.197", features = ["derive"]}
+serde_json = {version = "1.0.114"}
+thiserror = "1.0.58"
+tokio = {version = "1.36.0", default-features = false, features = ["macros", "net", "rt-multi-thread", "time", "signal"]}
+toml = "0.8.11"
+tower-http = {version = "0.5.2", features = ["cors", "trace"]}
+tracing = "0.1.40"
+tracing-appender = "0.2.3"
+tracing-subscriber = {version = "0.3.18"}
+uuid = {version = "1.7.0", features = ["v4", "serde"]}#1.6.1

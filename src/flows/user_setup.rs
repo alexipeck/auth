@@ -1,10 +1,10 @@
 use chrono::{DateTime, Utc};
 use email_address::EmailAddress;
-use peck_lib::datetime::serde::datetime_utc;
+use peck_lib::{crypto::generate_random_base32_string, datetime::serde::datetime_utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{cryptography::generate_random_base32_string, user_session::TokenPair};
+use crate::user_session::TokenPair;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserInvite {
