@@ -19,8 +19,6 @@ email_address = {version = "0.2.4", features = ["serde_support"]}
 google-authenticator = "0.4.2"
 lettre = "0.11.4"
 libsqlite3-sys = {version = ">=0.17.2, <0.27.0", features = ["bundled"]}
-[target.'cfg(not(target_os = "windows"))'.dependencies]
-openssl = {version = "0.10.64", features = ["vendored"]}
 peck-lib = {git = "https://github.com/alexipeck/peck-lib", features = ["datetime", "hashing", "uid", "crypto"]}
 rand = "0.8.5"
 rand_chacha = "0.3.1"
@@ -37,3 +35,6 @@ tracing = "0.1.40"
 tracing-appender = "0.2.3"
 tracing-subscriber = {version = "0.3.18"}
 uuid = {version = "1.7.0", features = ["v4", "serde"]}#1.6.1
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+openssl = {version = "0.10.64", features = ["vendored"]}
