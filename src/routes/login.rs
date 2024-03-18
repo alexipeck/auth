@@ -43,6 +43,7 @@ pub async fn init_login_flow_route(
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 async fn login_with_credentials(
     user_login: UserLogin,
     headers: HeaderMap,

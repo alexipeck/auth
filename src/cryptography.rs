@@ -42,6 +42,7 @@ struct EncryptionKeysModel {
     pub iv: [u8; 16],            // 128-bit IV for AES
 }
 
+#[cfg(not(target_os = "windows"))]
 pub struct EncryptionKeys {
     signing_private_key: PKey<Private>,
     signing_public_key: PKey<Public>,
@@ -272,7 +273,7 @@ impl EncryptionKeys {
 pub struct JsonEncryptedDataWrapper {
     pub data: String,
 }
-
+#[cfg(not(target_os = "windows"))]
 pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
     encrypted_url_safe_base64_data: String,
     private_key: &PKey<Private>,
