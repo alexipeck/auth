@@ -96,7 +96,6 @@ pub async fn validate_invite_token_route(
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 async fn setup_user_account(
     user_setup: UserSetup,
     headers: &HeaderMap,

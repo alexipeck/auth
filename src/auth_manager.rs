@@ -256,7 +256,7 @@ impl AuthManager {
     ) -> Result<(T, Option<DateTime<Utc>>), Error> {
         Token::verify_and_decrypt::<T>(
             token,
-            self.encryption_keys.get_public_signing_key(),
+            self.encryption_keys.get_verifying_key(),
             self.encryption_keys.get_symmetric_key(),
             self.encryption_keys.get_iv(),
         )
@@ -453,7 +453,7 @@ impl AuthManager {
             token: Token::create_signed_and_encrypted(
                 data,
                 Some(expiry),
-                self.encryption_keys.get_private_signing_key(),
+                self.encryption_keys.get_signing_key(),
                 self.encryption_keys.get_symmetric_key(),
                 self.encryption_keys.get_iv(),
             )?,
@@ -468,7 +468,7 @@ impl AuthManager {
         Token::create_signed_and_encrypted(
             data,
             None,
-            self.encryption_keys.get_private_signing_key(),
+            self.encryption_keys.get_signing_key(),
             self.encryption_keys.get_symmetric_key(),
             self.encryption_keys.get_iv(),
         )

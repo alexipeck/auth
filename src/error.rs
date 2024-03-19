@@ -6,7 +6,6 @@ use thiserror::Error;
 use uuid::Uuid;
 
 impl_error_wrapper!(SerdeError, serde_json::error::Error);
-impl_error_wrapper!(OpenSSLError, openssl::error::ErrorStack);
 impl_error_wrapper!(Base64DecodeError, base64::DecodeError);
 impl_error_wrapper!(FromUtf8Error, std::string::FromUtf8Error);
 impl_error_wrapper!(Utf8Error, core::str::Utf8Error);
@@ -18,6 +17,12 @@ impl_error_wrapper!(DieselResultError, diesel::result::Error);
 impl_error_wrapper!(TomlSerError, toml::ser::Error);
 impl_error_wrapper!(TomlDeError, toml::de::Error);
 impl_error_wrapper!(StdIoError, std::io::Error);
+impl_error_wrapper!(RSAError, rsa::errors::Error);
+impl_error_wrapper!(PKCS1Error, pkcs1::Error);
+impl_error_wrapper!(SignatureError, signature::Error);
+
+//impl_error_wrapper!(AeadError, aead::Error);
+
 //impl_error_wrapper!(EmailAddressError, email_address::EmailAddress);
 
 #[derive(Error, Debug)]
@@ -65,37 +70,39 @@ pub enum TokenError {
     #[error("DataSerialisation({0})")]
     DataSerialisation(#[from] SerdeError),
     #[error("DataEncryption({0})")]
-    DataEncryption(#[from] OpenSSLError),
+    DataEncryption(String),
     #[error("HeaderSerialisation({0})")]
     HeaderSerialisation(SerdeError),
     #[error("HeaderDeserialisation({0})")]
     HeaderDeserialisation(SerdeError),
-    #[error("CreateSigner({0})")]
+    #[error("ConvertingBytesToSignature({0})")]
+    ConvertingBytesToSignature(SignatureError),
+    /* #[error("CreateSigner({0})")]
     CreateSigner(OpenSSLError),
     #[error("FeedSigner({0})")]
     FeedSigner(OpenSSLError),
     #[error("FinaliseSignature({0})")]
-    FinaliseSignature(OpenSSLError),
+    FinaliseSignature(OpenSSLError), */
     #[error("InvalidFormatForDecoding")]
     InvalidFormatForDecoding,
     #[error("HeaderBase64Decode({0})")]
     HeaderBase64Decode(Base64DecodeError),
-    #[error("Feedverifier({0})")]
-    FeedVerifier(OpenSSLError),
+    /* #[error("Feedverifier({0})")]
+    FeedVerifier(OpenSSLError), */
     #[error("HeaderUnexpectedAlgorithm")]
     HeadedUnexpectedAlgorithm,
     #[error("SignatureBase64Decode({0})")]
     SignatureBase64Decode(Base64DecodeError),
-    #[error("CreateVerifier({0})")]
-    CreateVerifier(OpenSSLError),
+    /* #[error("CreateVerifier({0})")]
+    CreateVerifier(OpenSSLError), */
     #[error("FinaliseVerifier({0})")]
-    FinaliseVerifier(OpenSSLError),
-    #[error("SignatureVerificationFailed")]
-    SignatureVerificationFailed,
+    /* FinaliseVerifier(RSAError),
+    #[error("SignatureVerificationFailed({0})")] */
+    SignatureVerificationFailed(SignatureError),
     #[error("PayloadBase64Decode({0})")]
     PayloadBase64Decode(Base64DecodeError),
     #[error("DataDecryption({0})")]
-    DataDecryption(OpenSSLError),
+    DataDecryption(String),
     #[error("DataBytesToString({0})")]
     DataBytesToString(FromUtf8Error),
     #[error("DataDeserialisation({0})")]
@@ -150,30 +157,30 @@ pub enum StartupError {
 
 #[derive(Error, Debug)]
 pub enum EncryptionError {
-    #[error("GeneratingRSABase({0})")]
-    GeneratingRSABase(OpenSSLError),
+    /* #[error("GeneratingRSABase({0})")]
+    GeneratingRSABase(OpenSSLError), */
     #[error("GeneratingRSAPrivate({0})")]
-    GeneratingRSAPrivate(OpenSSLError),
-    #[error("GeneratingRSAPublic({0})")]
-    GeneratingRSAPublic(OpenSSLError),
-    #[error("GeneratingRSAPublicPEM({0})")]
-    GeneratingRSAPublicPEM(OpenSSLError),
+    GeneratingRSAPrivate(RSAError),
+    /* #[error("GeneratingRSAPublic({0})")]
+    GeneratingRSAPublic(RSAError), */
+    /* #[error("GeneratingRSAPublicPEM({0})")]
+    GeneratingRSAPublicPEM(OpenSSLError), */
     #[error("RSAPrivateConversion({0})")]
-    RSAPrivateConversion(OpenSSLError),
-    #[error("DataDecryption({0})")]
-    DataDecryption(OpenSSLError),
+    RSAPrivateConversion(RSAError),
+    /* #[error("DataDecryption({0})")]
+    DataDecryption(OpenSSLError), */
     #[error("PublicToPEMConversion({0})")]
-    PublicToPEMConversion(OpenSSLError),
+    PublicToPEMConversion(PKCS1Error),
     #[error("PublicPEMBytesToString({0})")]
     PublicPEMBytesToString(Utf8Error),
-    #[error("ConvertSigningPrivateToPEMPKCS8({0})")]
-    ConvertSigningPrivateToPEMPKCS8(OpenSSLError),
-    #[error("ConvertPrivateToPEMPKCS8({0})")]
-    ConvertPrivateToPEMPKCS8(OpenSSLError),
-    #[error("ConvertSigningPublicKeyToPEM({0})")]
-    ConvertSigningPublicKeyToPEM(OpenSSLError),
-    #[error("ConvertPublicKeyToPEM({0})")]
-    ConvertPublicKeyToPEM(OpenSSLError),
+    #[error("ConvertSigningPrivateKeyToPEMPKCS1({0})")]
+    ConvertSigningPrivateKeyToPEMPKCS1(PKCS1Error),
+    #[error("ConvertPrivateKeyToPEMPKCS1({0})")]
+    ConvertPrivateKeyToPEMPKCS1(PKCS1Error),
+    #[error("ConvertSigningPublicKeyToPEMPKCS1({0})")]
+    ConvertSigningPublicKeyToPEMPKCS1(PKCS1Error),
+    #[error("ConvertPublicKeyToPEMPKCS1({0})")]
+    ConvertPublicKeyToPEMPKCS1(PKCS1Error),
     #[error("ConvertModelToTOML({0})")]
     ConvertModelToTOML(TomlSerError),
     #[error("WriteTOMLToFile({0})")]
@@ -182,14 +189,14 @@ pub enum EncryptionError {
     ReadTOMLFromFile(StdIoError),
     #[error("ConvertTOMLToModel({0})")]
     ConvertTOMLToModel(TomlDeError),
-    #[error("SigningPrivateKeyFromPEM({0})")]
-    SigningPrivateKeyFromPEM(OpenSSLError),
-    #[error("SigningPublicKeyFromPEM({0})")]
-    SigningPublicKeyFromPEM(OpenSSLError),
-    #[error("PrivateKeyFromPEM({0})")]
-    PrivateKeyFromPEM(OpenSSLError),
-    #[error("PublicKeyFromPEM({0})")]
-    PublicKeyFromPEM(OpenSSLError),
+    #[error("SigningPrivateKeyFromPEMPKCS1({0})")]
+    SigningPrivateKeyFromPEMPKCS1(PKCS1Error),
+    #[error("SigningPublicKeyFromPEMPKCS1({0})")]
+    SigningPublicKeyFromPEMPKCS1(PKCS1Error),
+    #[error("PrivateKeyFromPEMPKCS1({0})")]
+    PrivateKeyFromPEMPKCS1(PKCS1Error),
+    #[error("PublicKeyFromPEMPKCS1({0})")]
+    PublicKeyFromPEMPKCS1(PKCS1Error),
 }
 
 #[derive(Error, Debug)]

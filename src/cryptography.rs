@@ -1,19 +1,29 @@
-use std::{fs, str::from_utf8};
-
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use openssl::{
-    pkey::{PKey, Private, Public},
-    rsa::{Padding, Rsa},
-};
-use peck_lib::crypto::prepare_rng;
-use rand::Rng;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use tracing::warn;
+use std::fs;
 
 use crate::error::{
-    Base64DecodeError, ClientPayloadError, EncryptionError, Error, FromUtf8Error, OpenSSLError,
-    SerdeError, StdIoError, TomlDeError, TomlSerError, Utf8Error,
+    Base64DecodeError, ClientPayloadError, EncryptionError, Error, FromUtf8Error, PKCS1Error,
+    RSAError, SerdeError, StdIoError, TomlDeError, TomlSerError,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use peck_lib::crypto::prepare_rng;
+use pkcs1::{
+    DecodeRsaPrivateKey, DecodeRsaPublicKey, EncodeRsaPrivateKey, EncodeRsaPublicKey, LineEnding,
+};
+use rand::Rng;
+use rand_core::OsRng;
+use rsa::{
+    pkcs1v15::{SigningKey, VerifyingKey},
+    sha2::Sha256,
+    signature::Keypair,
+    Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey,
+};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+/* use sha2::{
+    digest::core_api::{CoreWrapper, CtVariableCoreWrapper},
+    Sha256VarCore,
+};
+use sha2::{OidSha256, Sha256}; */
+use tracing::warn;
 
 pub const TOKEN_CHARSET: [char; 88] = [
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
@@ -34,20 +44,21 @@ pub fn generate_token(length: usize) -> String {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct EncryptionKeysModel {
-    pub signing_private_key: Vec<u8>,
-    pub signing_public_key: Vec<u8>,
-    pub private_key: Vec<u8>,
-    pub public_key: Vec<u8>,
+    pub signing_private_key: String,
+    pub signing_public_key: String,
+    pub private_key: String,
+    pub public_key: String,
     pub symmetric_key: [u8; 32], // 256-bit key for AES-256
     pub iv: [u8; 16],            // 128-bit IV for AES
 }
 
-#[cfg(not(target_os = "windows"))]
 pub struct EncryptionKeys {
-    signing_private_key: PKey<Private>,
-    signing_public_key: PKey<Public>,
-    private_key: PKey<Private>,
-    public_key: PKey<Public>,
+    signing_private_key: RsaPrivateKey,
+    signing_public_key: RsaPublicKey,
+    signing_key: SigningKey<Sha256>,
+    verifying_key: VerifyingKey<Sha256>,
+    private_key: RsaPrivateKey,
+    public_key: RsaPublicKey,
     symmetric_key: [u8; 32], // 256-bit key for AES-256
     iv: [u8; 16],            // 128-bit IV for AES
 }
@@ -56,9 +67,13 @@ impl EncryptionKeys {
     pub fn new() -> Result<Self, Error> {
         let (public_key, private_key) = Self::generate_asymmetric_keys()?;
         let (signing_public_key, signing_private_key) = Self::generate_asymmetric_keys()?;
+        let signing_key = SigningKey::<Sha256>::new(signing_private_key.to_owned());
+        let verifying_key = signing_key.verifying_key();
         Ok(Self {
             signing_private_key,
             signing_public_key,
+            signing_key,
+            verifying_key,
             private_key,
             public_key,
             symmetric_key: rand::thread_rng().gen(),
@@ -67,38 +82,40 @@ impl EncryptionKeys {
     }
 
     fn from_model(model: EncryptionKeysModel) -> Result<Self, Error> {
-        let signing_private_key = match PKey::private_key_from_pem(&model.signing_private_key) {
+        let signing_private_key = match RsaPrivateKey::from_pkcs1_pem(&model.signing_private_key) {
             Ok(signing_private_key) => signing_private_key,
             Err(err) => {
                 return Err(Error::Encryption(
-                    EncryptionError::SigningPrivateKeyFromPEM(OpenSSLError(err)),
+                    EncryptionError::SigningPrivateKeyFromPEMPKCS1(PKCS1Error(err)),
                 ))
             }
         };
-        let signing_public_key = match PKey::public_key_from_pem(&model.signing_public_key) {
+        let signing_public_key = match RsaPublicKey::from_pkcs1_pem(&model.signing_public_key) {
             Ok(signing_public_key) => signing_public_key,
             Err(err) => {
-                return Err(Error::Encryption(EncryptionError::SigningPublicKeyFromPEM(
-                    OpenSSLError(err),
+                return Err(Error::Encryption(
+                    EncryptionError::SigningPublicKeyFromPEMPKCS1(PKCS1Error(err)),
+                ))
+            }
+        };
+        let private_key = match RsaPrivateKey::from_pkcs1_pem(&model.private_key) {
+            Ok(signing_public_key) => signing_public_key,
+            Err(err) => {
+                return Err(Error::Encryption(EncryptionError::PrivateKeyFromPEMPKCS1(
+                    PKCS1Error(err),
                 )))
             }
         };
-        let private_key = match PKey::private_key_from_pem(&model.private_key) {
+        let public_key = match RsaPublicKey::from_pkcs1_pem(&model.public_key) {
             Ok(signing_public_key) => signing_public_key,
             Err(err) => {
-                return Err(Error::Encryption(EncryptionError::PrivateKeyFromPEM(
-                    OpenSSLError(err),
+                return Err(Error::Encryption(EncryptionError::PublicKeyFromPEMPKCS1(
+                    PKCS1Error(err),
                 )))
             }
         };
-        let public_key = match PKey::public_key_from_pem(&model.public_key) {
-            Ok(signing_public_key) => signing_public_key,
-            Err(err) => {
-                return Err(Error::Encryption(EncryptionError::PublicKeyFromPEM(
-                    OpenSSLError(err),
-                )))
-            }
-        };
+        let signing_key = SigningKey::<Sha256>::new(signing_private_key.to_owned());
+        let verifying_key = signing_key.verifying_key();
         Ok(Self {
             signing_private_key,
             signing_public_key,
@@ -106,47 +123,51 @@ impl EncryptionKeys {
             public_key,
             symmetric_key: model.symmetric_key,
             iv: model.iv,
+            signing_key,
+            verifying_key,
         })
     }
 
     pub fn save_to_file(&self, path: &str) -> Result<(), Error> {
-        let signing_private_key = match self.signing_private_key.private_key_to_pem_pkcs8() {
-            Ok(signing_private_key) => signing_private_key,
+        let signing_private_key_pkcs1_pem =
+            match self.signing_private_key.to_pkcs1_pem(LineEnding::LF) {
+                Ok(signing_private_key_pkcs1_pem) => signing_private_key_pkcs1_pem.to_string(),
+                Err(err) => {
+                    return Err(Error::Encryption(
+                        EncryptionError::ConvertSigningPrivateKeyToPEMPKCS1(PKCS1Error(err)),
+                    ))
+                }
+            };
+        let signing_public_key_pkcs1_pem =
+            match self.signing_public_key.to_pkcs1_pem(LineEnding::LF) {
+                Ok(signing_public_key_pkcs1_pem) => signing_public_key_pkcs1_pem,
+                Err(err) => {
+                    return Err(Error::Encryption(
+                        EncryptionError::ConvertSigningPublicKeyToPEMPKCS1(PKCS1Error(err)),
+                    ))
+                }
+            };
+        let private_key_pkcs1_pem = match self.private_key.to_pkcs1_pem(LineEnding::LF) {
+            Ok(private_key) => private_key.to_string(),
             Err(err) => {
                 return Err(Error::Encryption(
-                    EncryptionError::ConvertSigningPrivateToPEMPKCS8(OpenSSLError(err)),
+                    EncryptionError::ConvertPrivateKeyToPEMPKCS1(PKCS1Error(err)),
                 ))
             }
         };
-        let signing_public_key = match self.signing_public_key.public_key_to_pem() {
-            Ok(signing_public_mey) => signing_public_mey,
-            Err(err) => {
-                return Err(Error::Encryption(
-                    EncryptionError::ConvertSigningPublicKeyToPEM(OpenSSLError(err)),
-                ))
-            }
-        };
-        let private_key = match self.private_key.private_key_to_pem_pkcs8() {
-            Ok(private_key) => private_key,
-            Err(err) => {
-                return Err(Error::Encryption(
-                    EncryptionError::ConvertPrivateToPEMPKCS8(OpenSSLError(err)),
-                ))
-            }
-        };
-        let public_key = match self.public_key.public_key_to_pem() {
+        let public_key_pkcs1_pem = match self.public_key.to_pkcs1_pem(LineEnding::LF) {
             Ok(public_key) => public_key,
             Err(err) => {
-                return Err(Error::Encryption(EncryptionError::ConvertPublicKeyToPEM(
-                    OpenSSLError(err),
-                )))
+                return Err(Error::Encryption(
+                    EncryptionError::ConvertPublicKeyToPEMPKCS1(PKCS1Error(err)),
+                ))
             }
         };
         let encryption_keys_model = EncryptionKeysModel {
-            signing_private_key,
-            signing_public_key,
-            private_key,
-            public_key,
+            signing_private_key: signing_private_key_pkcs1_pem,
+            signing_public_key: signing_public_key_pkcs1_pem,
+            private_key: private_key_pkcs1_pem,
+            public_key: public_key_pkcs1_pem,
             symmetric_key: self.symmetric_key.to_owned(),
             iv: self.iv.to_owned(),
         };
@@ -186,77 +207,54 @@ impl EncryptionKeys {
         Self::from_model(encryption_keys_model)
     }
 
-    pub fn generate_asymmetric_keys() -> Result<(PKey<Public>, PKey<Private>), Error> {
-        let rsa: Rsa<Private> = match Rsa::generate(2048) {
-            Ok(rsa) => rsa,
+    pub fn generate_asymmetric_keys() -> Result<(RsaPublicKey, RsaPrivateKey), Error> {
+        let mut rng: OsRng = OsRng;
+        let rsa_private_key: RsaPrivateKey = match RsaPrivateKey::new(&mut rng, 2048) {
+            Ok(rsa_private_key) => rsa_private_key,
             Err(err) => {
                 return Err(
-                    Error::Encryption(EncryptionError::GeneratingRSABase(OpenSSLError(err))).into(),
+                    Error::Encryption(EncryptionError::GeneratingRSAPrivate(RSAError(err))).into(),
                 )
             }
         };
-        let private_key = match PKey::from_rsa(rsa.clone()) {
-            Ok(private_key) => private_key,
-            Err(err) => {
-                return Err(
-                    Error::Encryption(EncryptionError::GeneratingRSAPrivate(OpenSSLError(err)))
-                        .into(),
-                )
-            }
-        };
-        let public_key_pem: Vec<u8> = match rsa.public_key_to_pem() {
-            Ok(public_key_pem) => public_key_pem,
-            Err(err) => {
-                return Err(Error::Encryption(EncryptionError::GeneratingRSAPublicPEM(
-                    OpenSSLError(err),
-                ))
-                .into())
-            }
-        };
-        let public_key = match PKey::public_key_from_pem(&public_key_pem) {
-            Ok(public_key) => public_key,
-            Err(err) => {
-                return Err(
-                    Error::Encryption(EncryptionError::GeneratingRSAPublic(OpenSSLError(err)))
-                        .into(),
-                )
-            }
-        };
-        Ok((public_key, private_key))
+        let rsa_public_key: RsaPublicKey = rsa_private_key.to_public_key();
+        Ok((rsa_public_key, rsa_private_key))
     }
 
-    pub fn get_private_signing_key(&self) -> &PKey<Private> {
+    pub fn get_private_signing_key(&self) -> &RsaPrivateKey {
         &self.signing_private_key
     }
 
-    pub fn get_public_signing_key(&self) -> &PKey<Public> {
+    pub fn get_public_signing_key(&self) -> &RsaPublicKey {
         &self.signing_public_key
     }
 
-    pub fn get_public_encryption_key(&self) -> &PKey<Public> {
+    pub fn get_public_encryption_key(&self) -> &RsaPublicKey {
         &self.public_key
     }
 
+    pub fn get_signing_key(&self) -> SigningKey<Sha256> {
+        self.signing_key.to_owned()
+    }
+
+    pub fn get_verifying_key(&self) -> VerifyingKey<Sha256> {
+        self.verifying_key.to_owned()
+    }
+
     pub fn get_public_encryption_key_string(&self) -> Result<String, Error> {
-        let public_pem_bytes = match self.public_key.public_key_to_pem() {
-            Ok(public_pem_bytes) => public_pem_bytes,
+        match self.public_key.to_pkcs1_pem(LineEnding::LF) {
+            Ok(public_pkcs1_string) => Ok(public_pkcs1_string),
             Err(err) => {
                 warn!("{}", err);
-                return Err(Error::Encryption(EncryptionError::PublicToPEMConversion(
-                    OpenSSLError(err),
-                ))
-                .into());
+                return Err(
+                    Error::Encryption(EncryptionError::ConvertPublicKeyToPEMPKCS1(PKCS1Error(err)))
+                        .into(),
+                );
             }
-        };
-        match from_utf8(&public_pem_bytes) {
-            Ok(public_pem_str) => Ok(public_pem_str.to_string()),
-            Err(err) => Err(
-                Error::Encryption(EncryptionError::PublicPEMBytesToString(Utf8Error(err))).into(),
-            ),
         }
     }
 
-    pub fn get_private_decryption_key(&self) -> &PKey<Private> {
+    pub fn get_private_decryption_key(&self) -> &RsaPrivateKey {
         &self.private_key
     }
 
@@ -273,10 +271,10 @@ impl EncryptionKeys {
 pub struct JsonEncryptedDataWrapper {
     pub data: String,
 }
-#[cfg(not(target_os = "windows"))]
+
 pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
     encrypted_url_safe_base64_data: String,
-    private_key: &PKey<Private>,
+    private_key: &RsaPrivateKey,
 ) -> Result<T, Error> {
     let encrypted_credentials_bytes: Vec<u8> =
         match URL_SAFE_NO_PAD.decode(encrypted_url_safe_base64_data) {
@@ -290,31 +288,30 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
                 )
             }
         };
-    let mut decrypted_data_buffer = vec![0; private_key.size()];
+    //let mut decrypted_data_buffer = vec![0; private_key.size()];
 
-    let rsa_private = match private_key.rsa() {
-        Ok(rsa_private) => rsa_private,
-        Err(err) => {
-            return Err(
-                Error::Encryption(EncryptionError::RSAPrivateConversion(OpenSSLError(err))).into(),
-            )
-        }
-    };
-    let decrypted_data_len = match rsa_private.private_decrypt(
+    let decrypted_data_bytes =
+        match private_key.decrypt(Pkcs1v15Encrypt, &encrypted_credentials_bytes) {
+            Ok(rsa_private) => rsa_private,
+            Err(err) => {
+                return Err(
+                    Error::Encryption(EncryptionError::RSAPrivateConversion(RSAError(err))).into(),
+                )
+            }
+        };
+    /* let decrypted_data_len = match decrypted_data.private_decrypt(
         &encrypted_credentials_bytes,
         &mut decrypted_data_buffer,
         Padding::PKCS1_OAEP,
     ) {
         Ok(decrypted_data_len) => decrypted_data_len,
         Err(err) => {
-            return Err(
-                Error::Encryption(EncryptionError::DataDecryption(OpenSSLError(err))).into(),
-            )
+            return Err(Error::Encryption(EncryptionError::DataDecryption(PKCS1Error(err))).into())
         }
     };
-    decrypted_data_buffer.truncate(decrypted_data_len);
+    decrypted_data_buffer.truncate(decrypted_data_len); */
 
-    let decrypted_data_str: String = match String::from_utf8(decrypted_data_buffer) {
+    let decrypted_data_string: String = match String::from_utf8(decrypted_data_bytes) {
         Ok(decrypted_data_str) => decrypted_data_str,
         Err(err) => {
             return Err(
@@ -323,7 +320,7 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
             )
         }
     };
-    let decrypted_data_struct: T = match serde_json::from_str::<T>(&decrypted_data_str) {
+    let decrypted_data_struct: T = match serde_json::from_str::<T>(&decrypted_data_string) {
         Ok(decrypted_data_struct) => decrypted_data_struct,
         Err(err) => {
             return Err(
