@@ -40,9 +40,9 @@ uuid = {version = "1.7.0", features = ["v4", "serde"]}#1.6.1
 #openssl = {version = "0.10.64", features = ["vendored"]}
 
 aead = "0.5.2"
-aes = "0.8.4"
+#aes = "0.8.4"
 aes-gcm = "0.10.3"
-cbc = {version = "0.1.2", features = []}
+#cbc = {version = "0.1.2", features = []}
 cipher = "0.4.4"
 pkcs1 = "0.7.5"
 rsa = {version = "0.9.6", features = ["sha2", "serde", "std"]}
