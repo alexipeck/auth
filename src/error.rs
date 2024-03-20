@@ -95,9 +95,9 @@ pub enum TokenError {
     SignatureBase64Decode(Base64DecodeError),
     /* #[error("CreateVerifier({0})")]
     CreateVerifier(OpenSSLError), */
-    #[error("FinaliseVerifier({0})")]
-    /* FinaliseVerifier(RSAError),
-    #[error("SignatureVerificationFailed({0})")] */
+    /* #[error("FinaliseVerifier({0})")]
+    FinaliseVerifier(RSAError), */
+    #[error("SignatureVerificationFailed({0})")]
     SignatureVerificationFailed(SignatureError),
     #[error("PayloadBase64Decode({0})")]
     PayloadBase64Decode(Base64DecodeError),

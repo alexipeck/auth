@@ -16,6 +16,31 @@ pub mod smtp_manager;
 pub mod token;
 pub mod user;
 pub mod user_session;
+mod tests {
+    use crate::token::Token;
+
+    #[test]
+    pub fn test_signing() {
+        let encryption_keys = crate::cryptography::EncryptionKeys::new().unwrap();
+        let tokenised = Token::create_signed_and_encrypted(
+            "Test".to_string(),
+            None,
+            encryption_keys.get_signing_key(),
+            encryption_keys.get_symmetric_key(),
+            encryption_keys.get_iv(),
+        )
+        .unwrap();
+        println!("|{tokenised}|");
+        let (data, _) = Token::verify_and_decrypt::<String>(
+            &tokenised,
+            encryption_keys.get_verifying_key(),
+            encryption_keys.get_symmetric_key(),
+            encryption_keys.get_iv(),
+        )
+        .unwrap();
+        println!("|{data}|");
+    }
+}
 
 pub const DEFAULT_READ_LIFETIME_SECONDS: i64 = 900;
 pub const DEFAULT_WRITE_LIFETIME_SECONDS: i64 = 300;
