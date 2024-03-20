@@ -49,7 +49,7 @@ struct EncryptionKeysModel {
     pub private_key: String,
     pub public_key: String,
     pub symmetric_key: [u8; 32], // 256-bit key for AES-256
-    pub iv: [u8; 16],            // 128-bit IV for AES
+    pub iv: [u8; 12],            // 96-bit IV for AES in GCM mode
 }
 
 pub struct EncryptionKeys {
@@ -60,7 +60,7 @@ pub struct EncryptionKeys {
     private_key: RsaPrivateKey,
     public_key: RsaPublicKey,
     symmetric_key: [u8; 32], // 256-bit key for AES-256
-    iv: [u8; 16],            // 128-bit IV for AES
+    iv: [u8; 12],            // 128-bit IV for AES
 }
 
 impl EncryptionKeys {
@@ -262,7 +262,7 @@ impl EncryptionKeys {
         &self.symmetric_key
     }
 
-    pub fn get_iv(&self) -> &[u8; 16] {
+    pub fn get_iv(&self) -> &[u8; 12] {
         &self.iv
     }
 }
