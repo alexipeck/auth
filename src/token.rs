@@ -188,7 +188,6 @@ impl Token {
         symmetric_key: &[u8],
         iv: &[u8],
     ) -> Result<(T, Option<DateTime<Utc>>), Error> {
-        println!("A");
         let parts: Vec<&str> = token.split('.').collect();
         if parts.len() != 3 {
             println!("{:?}", parts);
@@ -197,7 +196,6 @@ impl Token {
 
         //Header validation
         {
-            println!("B");
             let header_str_bytes: Vec<u8> = match URL_SAFE_NO_PAD.decode(parts[0]) {
                 Ok(header_str_bytes) => header_str_bytes,
                 Err(err) => {
@@ -206,7 +204,6 @@ impl Token {
                     )))
                 }
             };
-            println!("C");
             let header: Header = match serde_json::from_slice(&header_str_bytes) {
                 Ok(header) => header,
                 Err(err) => {
@@ -215,7 +212,6 @@ impl Token {
                     ))))
                 }
             };
-            println!("D");
             if header.alg != Algorithm::RSASHA256 {
                 return Err(Error::Token(TokenError::HeadedUnexpectedAlgorithm));
             }
@@ -225,7 +221,6 @@ impl Token {
 
         //Signature verification
         {
-            println!("E");
             let signature_bytes: Vec<u8> = match URL_SAFE_NO_PAD.decode(parts[2]) {
                 Ok(signature_bytes) => signature_bytes,
                 Err(err) => {
@@ -234,7 +229,6 @@ impl Token {
                     )))
                 }
             };
-            println!("F");
             let signature: Signature = match Signature::try_from(signature_bytes.as_slice()) {
                 Ok(signature) => signature,
                 Err(err) => {
@@ -243,19 +237,16 @@ impl Token {
                     )))
                 }
             };
-            println!("G");
             let mut data_to_hash: Vec<u8> = Vec::new();
             data_to_hash.extend_from_slice(parts[0].as_bytes());
             data_to_hash.extend_from_slice(parts[1].as_bytes());
 
-            println!("H");
             if let Err(err) = verifying_key.verify(&data_to_hash, &signature) {
                 return Err(Error::Token(TokenError::SignatureVerificationFailed(
                     SignatureError(err),
                 )));
             };
         }
-        println!("I");
 
         let encrypted_payload: Vec<u8> = match URL_SAFE_NO_PAD.decode(parts[1]) {
             Ok(encrypted_payload) => encrypted_payload,
@@ -265,7 +256,6 @@ impl Token {
                 )))
             }
         };
-        println!("J");
         let cipher = Aes256Gcm::new(GenericArray::from_slice(&symmetric_key));
         let decrypted_data: Vec<u8> =
             match cipher.decrypt(GenericArray::from_slice(&iv), &*encrypted_payload) {
@@ -275,7 +265,6 @@ impl Token {
                     return Err(Error::Token(TokenError::DataDecryption(err.to_string())).into());
                 }
             };
-        println!("K");
         let decrypted_data_str: String = match String::from_utf8(decrypted_data) {
             Ok(decrypted_data_str) => decrypted_data_str,
             Err(err) => {
