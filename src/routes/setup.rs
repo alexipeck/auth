@@ -114,7 +114,7 @@ async fn setup_user_account(
         ));
     }
     let credentials: SetupCredentials = decrypt_url_safe_base64_with_private_key::<SetupCredentials>(
-        user_setup.encrypted_credentials,
+        user_setup.encrypted_credentials.into(),
         &auth_manager.encryption_keys.get_private_decryption_key(),
     )?;
 

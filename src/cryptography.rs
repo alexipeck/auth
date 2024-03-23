@@ -252,10 +252,6 @@ impl EncryptionKeys {
     pub fn get_symmetric_key(&self) -> &[u8; 32] {
         &self.symmetric_key
     }
-
-    /* pub fn get_iv(&self) -> &[u8; 12] {
-        &self.iv
-    } */
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -264,7 +260,7 @@ pub struct JsonEncryptedDataWrapper {
 }
 
 pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
-    encrypted_url_safe_base64_data: String,
+    encrypted_url_safe_base64_data: Vec<u8>,
     private_key: &RsaPrivateKey,
 ) -> Result<T, Error> {
     let encrypted_credentials_bytes: Vec<u8> =

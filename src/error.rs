@@ -51,6 +51,10 @@ pub enum AuthenticationError {
     AccountSetupIncomplete,
     #[error("UserNotFound({0})")]
     UserNotFound(Uuid),
+    #[error("SerialisingLoginCredentials({0})")]
+    SerialisingLoginCredentials(SerdeError),
+    #[error("EncryptLoginCredentials({0})")]
+    EncryptLoginCredentials(RSAError),
     /* #[error("")]
     ErrorGetting2FACodeFromSecret,
     #[error("Argon2ValidationError({0})")]
@@ -71,6 +75,8 @@ pub enum TokenError {
     DataSerialisation(#[from] SerdeError),
     #[error("DataEncryption({0})")]
     DataEncryption(String),
+    #[error("EncryptLoginCredentials({0})")]
+    EncryptLoginCredentials(RSAError),
     #[error("HeaderSerialisation({0})")]
     HeaderSerialisation(SerdeError),
     #[error("HeaderDeserialisation({0})")]
@@ -81,6 +87,9 @@ pub enum TokenError {
     DecodeURLSafeBase64Deserialise(SerdeError),
     #[error("EncodeURLSafeBase64Serialise({0})")]
     EncodeURLSafeBase64Serialise(SerdeError),
+    /* #[error("SerialiseLoginCredentials({0})")]
+    SerialiseLoginCredentials(SerdeError), */
+
     /* #[error("CreateSigner({0})")]
     CreateSigner(OpenSSLError),
     #[error("FeedSigner({0})")]
