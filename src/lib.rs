@@ -26,8 +26,6 @@ mod tests {
             encryption_keys.get_signing_key(),
             encryption_keys.get_symmetric_key(),
         )
-        .unwrap()
-        .to_string()
         .unwrap();
         let token = crate::token::Token::from_str(&tokenised).unwrap();
         let (data, _) = token

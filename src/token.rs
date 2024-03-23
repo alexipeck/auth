@@ -155,7 +155,7 @@ impl Token {
         data: T,
         expiry: DateTime<Utc>,
         signing_key: &mut SigningKey<Sha256>,
-    ) -> Result<Self, Error> {
+    ) -> Result<String, Error> {
         let serialised_data_base64: String = {
             let data: TokenInnerInner<T> = TokenInnerInner {
                 data,
@@ -175,14 +175,15 @@ impl Token {
         Ok(Self {
             inner: TokenInner::RSASigned(serialised_data_base64),
             signature: SignatureWrapper(signature),
-        })
+        }
+        .to_string()?)
     }
     pub fn create_signed_and_encrypted_lifetime<T: Serialize + DeserializeOwned>(
         data: T,
         lifetime: Duration,
         signing_key: SigningKey<Sha256>,
         symmetric_key: &[u8],
-    ) -> Result<Self, Error> {
+    ) -> Result<String, Error> {
         let expiry: DateTime<Utc> = Utc::now() + lifetime;
         Self::create_signed_and_encrypted(data, Some(expiry), signing_key, symmetric_key)
     }
@@ -191,7 +192,7 @@ impl Token {
         expiry: Option<DateTime<Utc>>,
         mut signing_key: SigningKey<Sha256>,
         symmetric_key: &[u8],
-    ) -> Result<Self, Error> {
+    ) -> Result<String, Error> {
         let nonce: Nonce<Aes256Gcm> = Aes256Gcm::generate_nonce(&mut OsRng);
         let encrypted_data_base64: String = {
             let data: TokenInnerInner<T> = TokenInnerInner {
@@ -224,7 +225,8 @@ impl Token {
                 NonceAes256Gcm(nonce),
             ),
             signature: SignatureWrapper(signature),
-        })
+        }
+        .to_string()?)
     }
 
     pub fn verify_and_decrypt<T: Serialize + DeserializeOwned>(

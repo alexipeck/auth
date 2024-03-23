@@ -455,7 +455,7 @@ impl AuthManager {
                 self.encryption_keys.get_signing_key(),
                 self.encryption_keys.get_symmetric_key(),
             )?
-            .to_string()?,
+            .to_string(),
             expiry,
         })
     }
@@ -463,7 +463,7 @@ impl AuthManager {
     pub fn create_signed_and_encrypted_token<T: Serialize + DeserializeOwned>(
         &self,
         data: T,
-    ) -> Result<Token, Error> {
+    ) -> Result<String, Error> {
         Token::create_signed_and_encrypted(
             data,
             None,
