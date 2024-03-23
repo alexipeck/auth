@@ -1,5 +1,3 @@
-use std::fs;
-
 use crate::error::{
     Base64DecodeError, ClientPayloadError, EncryptionError, Error, FromUtf8Error, PKCS1Error,
     RSAError, SerdeError, StdIoError, TomlDeError, TomlSerError,
@@ -18,11 +16,7 @@ use rsa::{
     Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-/* use sha2::{
-    digest::core_api::{CoreWrapper, CtVariableCoreWrapper},
-    Sha256VarCore,
-};
-use sha2::{OidSha256, Sha256}; */
+use std::fs;
 use tracing::warn;
 
 pub const TOKEN_CHARSET: [char; 88] = [
@@ -49,7 +43,7 @@ struct EncryptionKeysModel {
     pub private_key: String,
     pub public_key: String,
     pub symmetric_key: [u8; 32], // 256-bit key for AES-256
-    pub iv: [u8; 12],            // 96-bit IV for AES in GCM mode
+                                 /* pub iv: [u8; 12],            // 96-bit IV for AES in GCM mode */
 }
 
 pub struct EncryptionKeys {
@@ -59,8 +53,7 @@ pub struct EncryptionKeys {
     verifying_key: VerifyingKey<Sha256>,
     private_key: RsaPrivateKey,
     public_key: RsaPublicKey,
-    symmetric_key: [u8; 32], // 256-bit key for AES-256
-    iv: [u8; 12],            // 128-bit IV for AES
+    symmetric_key: [u8; 32], /* AesGcm<Aes256, UInt<UInt<UInt<UInt<UTerm, B1>, B1>, B0>, B0>> */ // 256-bit key for AES-256
 }
 
 impl EncryptionKeys {
@@ -76,8 +69,8 @@ impl EncryptionKeys {
             verifying_key,
             private_key,
             public_key,
-            symmetric_key: rand::thread_rng().gen(),
-            iv: rand::thread_rng().gen(),
+            symmetric_key: rand::thread_rng().gen::<[u8; 32]>(),
+            /* iv: Aes256Gcm::generate_nonce(&mut OsRng), //rand::thread_rng().gen() */
         })
     }
 
@@ -122,7 +115,6 @@ impl EncryptionKeys {
             private_key,
             public_key,
             symmetric_key: model.symmetric_key,
-            iv: model.iv,
             signing_key,
             verifying_key,
         })
@@ -169,7 +161,6 @@ impl EncryptionKeys {
             private_key: private_key_pkcs1_pem,
             public_key: public_key_pkcs1_pem,
             symmetric_key: self.symmetric_key.to_owned(),
-            iv: self.iv.to_owned(),
         };
         let toml_string = match toml::to_string(&encryption_keys_model) {
             Ok(toml) => toml,
@@ -262,9 +253,9 @@ impl EncryptionKeys {
         &self.symmetric_key
     }
 
-    pub fn get_iv(&self) -> &[u8; 12] {
+    /* pub fn get_iv(&self) -> &[u8; 12] {
         &self.iv
-    }
+    } */
 }
 
 #[derive(Debug, Serialize, Deserialize)]

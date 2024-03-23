@@ -77,6 +77,10 @@ pub enum TokenError {
     HeaderDeserialisation(SerdeError),
     #[error("ConvertingBytesToSignature({0})")]
     ConvertingBytesToSignature(SignatureError),
+    #[error("DecodeURLSafeBase64Deserialise({0})")]
+    DecodeURLSafeBase64Deserialise(SerdeError),
+    #[error("EncodeURLSafeBase64Serialise({0})")]
+    EncodeURLSafeBase64Serialise(SerdeError),
     /* #[error("CreateSigner({0})")]
     CreateSigner(OpenSSLError),
     #[error("FeedSigner({0})")]
@@ -85,6 +89,8 @@ pub enum TokenError {
     FinaliseSignature(OpenSSLError), */
     #[error("InvalidFormatForDecoding")]
     InvalidFormatForDecoding,
+    #[error("Base64Decode({0})")]
+    Base64Decode(Base64DecodeError),
     #[error("HeaderBase64Decode({0})")]
     HeaderBase64Decode(Base64DecodeError),
     /* #[error("Feedverifier({0})")]

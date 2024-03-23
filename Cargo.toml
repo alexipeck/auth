@@ -2,7 +2,7 @@
 authors = ["Alexi Peck <alexinicolaspeck@gmail.com>"]
 edition = "2021"
 name = "auth"
-version = "0.1.9"
+version = "0.2.0"
 
 [dependencies]
 axum = {version = "0.7.4", features = ["http2", "tokio"]}

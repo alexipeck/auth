@@ -17,28 +17,26 @@ pub mod token;
 pub mod user;
 pub mod user_session;
 mod tests {
-    use crate::token::Token;
-
     #[test]
     pub fn test_signing() {
         let encryption_keys = crate::cryptography::EncryptionKeys::new().unwrap();
-        let tokenised = Token::create_signed_and_encrypted(
+        let tokenised = crate::token::Token::create_signed_and_encrypted(
             "Test".to_string(),
             None,
             encryption_keys.get_signing_key(),
             encryption_keys.get_symmetric_key(),
-            encryption_keys.get_iv(),
         )
+        .unwrap()
+        .to_string()
         .unwrap();
-        println!("|{tokenised}|");
-        let (data, _) = Token::verify_and_decrypt::<String>(
-            &tokenised,
-            encryption_keys.get_verifying_key(),
-            encryption_keys.get_symmetric_key(),
-            encryption_keys.get_iv(),
-        )
-        .unwrap();
-        println!("|{data}|");
+        let token = crate::token::Token::from_str(&tokenised).unwrap();
+        let (data, _) = token
+            .verify_and_decrypt::<String>(
+                encryption_keys.get_verifying_key(),
+                encryption_keys.get_symmetric_key(),
+            )
+            .unwrap();
+        assert_eq!(data, "Test".to_string())
     }
 }
 

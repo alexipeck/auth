@@ -254,11 +254,10 @@ impl AuthManager {
         &self,
         token: &str,
     ) -> Result<(T, Option<DateTime<Utc>>), Error> {
-        Token::verify_and_decrypt::<T>(
-            token,
+        let token: Token = Token::from_str(token)?;
+        token.verify_and_decrypt::<T>(
             self.encryption_keys.get_verifying_key(),
             self.encryption_keys.get_symmetric_key(),
-            self.encryption_keys.get_iv(),
         )
     }
 
@@ -455,8 +454,8 @@ impl AuthManager {
                 Some(expiry),
                 self.encryption_keys.get_signing_key(),
                 self.encryption_keys.get_symmetric_key(),
-                self.encryption_keys.get_iv(),
-            )?,
+            )?
+            .to_string()?,
             expiry,
         })
     }
@@ -464,13 +463,12 @@ impl AuthManager {
     pub fn create_signed_and_encrypted_token<T: Serialize + DeserializeOwned>(
         &self,
         data: T,
-    ) -> Result<String, Error> {
+    ) -> Result<Token, Error> {
         Token::create_signed_and_encrypted(
             data,
             None,
             self.encryption_keys.get_signing_key(),
             self.encryption_keys.get_symmetric_key(),
-            self.encryption_keys.get_iv(),
         )
     }
 
