@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize)]
 pub struct LoginFlow {
     token_pair: TokenPair,
-    public_encryption_key: String,
+    public_encryption_key: RsaPublicKey,
 }
 
 impl LoginFlow {
-    pub fn new(token_pair: TokenPair, public_encryption_key: String) -> Self {
+    pub fn new(token_pair: TokenPair, public_encryption_key: RsaPublicKey) -> Self {
         Self {
             token_pair,
             public_encryption_key,

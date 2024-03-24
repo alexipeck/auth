@@ -46,7 +46,6 @@ struct EncryptionKeysModel {
     pub private_key: String,
     pub public_key: String,
     pub symmetric_key: [u8; 32], // 256-bit key for AES-256
-                                 /* pub iv: [u8; 12],            // 96-bit IV for AES in GCM mode */
 }
 
 pub struct EncryptionKeys {
@@ -56,7 +55,7 @@ pub struct EncryptionKeys {
     verifying_key: VerifyingKey<Sha256>,
     private_key: RsaPrivateKey,
     public_key: RsaPublicKey,
-    symmetric_key: [u8; 32], /* AesGcm<Aes256, UInt<UInt<UInt<UInt<UTerm, B1>, B1>, B0>, B0>> */ // 256-bit key for AES-256
+    symmetric_key: [u8; 32], // 256-bit key for AES-256
 }
 
 impl EncryptionKeys {
@@ -233,19 +232,6 @@ impl EncryptionKeys {
 
     pub fn get_verifying_key(&self) -> VerifyingKey<Sha256> {
         self.verifying_key.to_owned()
-    }
-
-    pub fn get_public_encryption_key_string(&self) -> Result<String, Error> {
-        match self.public_key.to_pkcs1_pem(LineEnding::LF) {
-            Ok(public_pkcs1_string) => Ok(public_pkcs1_string),
-            Err(err) => {
-                warn!("{}", err);
-                return Err(
-                    Error::Encryption(EncryptionError::ConvertPublicKeyToPEMPKCS1(PKCS1Error(err)))
-                        .into(),
-                );
-            }
-        }
     }
 
     pub fn get_private_decryption_key(&self) -> &RsaPrivateKey {

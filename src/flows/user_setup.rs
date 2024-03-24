@@ -4,6 +4,7 @@ use peck_lib::{
     auth::token_pair::TokenPair, crypto::generate_random_base32_string,
     datetime::serde::datetime_utc,
 };
+use rsa::RsaPublicKey;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -89,7 +90,7 @@ pub struct UserSetupFlow {
     token_pair: TokenPair,
     email: EmailAddress,
     two_fa_client_secret: String,
-    public_encryption_key: String,
+    public_encryption_key: RsaPublicKey,
 }
 
 impl UserSetupFlow {
@@ -97,7 +98,7 @@ impl UserSetupFlow {
         token_pair: TokenPair,
         email: EmailAddress,
         two_fa_client_secret: String,
-        public_encryption_key: String,
+        public_encryption_key: RsaPublicKey,
     ) -> Self {
         Self {
             token_pair,

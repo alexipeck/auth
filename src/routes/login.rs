@@ -24,10 +24,13 @@ fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result
         Duration::minutes(5),
         None,
     )?;
-    let public_encryption_key = auth_manager
-        .encryption_keys
-        .get_public_encryption_key_string()?;
-    Ok(LoginFlow::new(token_pair, public_encryption_key))
+    Ok(LoginFlow::new(
+        token_pair,
+        auth_manager
+            .encryption_keys
+            .get_public_encryption_key()
+            .to_owned(),
+    ))
 }
 
 pub async fn init_login_flow_route(

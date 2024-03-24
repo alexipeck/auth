@@ -1425,7 +1425,7 @@ dependencies = [
 [[package]]
 name = "peck-lib"
 version = "1.1.2"
-source = "git+https://github.com/alexipeck/peck-lib#eb9a58ab5b9a5dfd8097e3d4b74070d953ef172c"
+source = "git+https://github.com/alexipeck/peck-lib#b411b5c03b289401e97f866ca16af9458c1d65c8"
 dependencies = [
  "aead",
  "blake3",

@@ -61,15 +61,14 @@ async fn validate_invite_token(
             user_invite_instance,
         )?;
     };
-
-    let public_encryption_key = auth_manager
-        .encryption_keys
-        .get_public_encryption_key_string()?;
     Ok(UserSetupFlow::new(
         token_pair,
         email,
         two_fa_client_secret,
-        public_encryption_key,
+        auth_manager
+            .encryption_keys
+            .get_public_encryption_key()
+            .to_owned(),
     ))
 }
 
