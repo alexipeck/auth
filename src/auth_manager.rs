@@ -10,14 +10,15 @@ use crate::{
     smtp_manager::SmtpManager,
     token::Token,
     user::{User, UserProfile, UserSafe},
-    user_session::{ReadInternal, TokenMode, TokenPair, UserToken},
+    user_session::{ReadInternal, TokenMode, UserToken},
     DEFAULT_REFRESH_IN_LAST_X_SECONDS,
 };
 use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use peck_lib::{
-    datetime::r#trait::Expired, hashing::r#trait::HashDebug, uid::authority::UIDAuthority,
+    auth::token_pair::TokenPair, datetime::r#trait::Expired, hashing::r#trait::HashDebug,
+    uid::authority::UIDAuthority,
 };
 use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};

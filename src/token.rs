@@ -1,4 +1,4 @@
-use crate::error::{Base64DecodeError, Error, SerdeError, SignatureError, TokenError};
+use crate::error::{Base64DecodeError, Error, SignatureError, TokenError};
 use aead::{AeadCore, Nonce, OsRng};
 use aes_gcm::aead::Aead;
 use aes_gcm::Aes256Gcm;
@@ -6,6 +6,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chrono::{DateTime, Duration, Utc};
 use cipher::generic_array::GenericArray;
 use cipher::KeyInit;
+use peck_lib::auth::error::SerdeError;
 use peck_lib::datetime::r#trait::Expired;
 use peck_lib::datetime::serde::datetime_utc_option;
 use rsa::pkcs1v15::{Signature, SigningKey, VerifyingKey};

@@ -4,7 +4,7 @@ use crate::{
     error::{AuthenticationError, Error},
     flows::user_login::{LoginCredentials, LoginFlow, UserLogin},
     user::ClientState,
-    user_session::{TokenPair, UserSession},
+    user_session::UserSession,
 };
 use axum::{
     extract::ConnectInfo,
@@ -13,6 +13,7 @@ use axum::{
     Extension, Json,
 };
 use chrono::Duration;
+use peck_lib::auth::token_pair::TokenPair;
 use std::{net::SocketAddr, sync::Arc};
 use tracing::{info, warn};
 

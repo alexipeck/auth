@@ -1,11 +1,14 @@
 use axum::http::header::InvalidHeaderValue;
 use email_address::EmailAddress;
 use google_authenticator::GAError;
-use peck_lib::{impl_error_wrapper, uid::error::UIDAuthorityError};
+use peck_lib::{
+    auth::error::{RSAError, SerdeError},
+    impl_error_wrapper,
+    uid::error::UIDAuthorityError,
+};
 use thiserror::Error;
 use uuid::Uuid;
 
-impl_error_wrapper!(SerdeError, serde_json::error::Error);
 impl_error_wrapper!(Base64DecodeError, base64::DecodeError);
 impl_error_wrapper!(FromUtf8Error, std::string::FromUtf8Error);
 impl_error_wrapper!(Utf8Error, core::str::Utf8Error);
@@ -17,7 +20,6 @@ impl_error_wrapper!(DieselResultError, diesel::result::Error);
 impl_error_wrapper!(TomlSerError, toml::ser::Error);
 impl_error_wrapper!(TomlDeError, toml::de::Error);
 impl_error_wrapper!(StdIoError, std::io::Error);
-impl_error_wrapper!(RSAError, rsa::errors::Error);
 impl_error_wrapper!(PKCS1Error, pkcs1::Error);
 impl_error_wrapper!(SignatureError, signature::Error);
 

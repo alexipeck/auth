@@ -1,9 +1,10 @@
-use crate::{
-    error::{AuthenticationError, Error, RSAError, SerdeError},
-    user_session::TokenPair,
-};
+use crate::error::{AuthenticationError, Error};
 use aead::OsRng;
 use email_address::EmailAddress;
+use peck_lib::auth::{
+    error::{RSAError, SerdeError},
+    token_pair::TokenPair,
+};
 use rsa::Pkcs1v15Encrypt;
 pub use rsa::RsaPublicKey;
 use serde::{Deserialize, Serialize};

@@ -1,9 +1,12 @@
 use crate::error::{
     Base64DecodeError, ClientPayloadError, EncryptionError, Error, FromUtf8Error, PKCS1Error,
-    RSAError, SerdeError, StdIoError, TomlDeError, TomlSerError,
+    StdIoError, TomlDeError, TomlSerError,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use peck_lib::crypto::prepare_rng;
+use peck_lib::{
+    auth::error::{RSAError, SerdeError},
+    crypto::prepare_rng,
+};
 use pkcs1::{
     DecodeRsaPrivateKey, DecodeRsaPublicKey, EncodeRsaPrivateKey, EncodeRsaPublicKey, LineEnding,
 };
