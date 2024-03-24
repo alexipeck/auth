@@ -1,6 +1,6 @@
 use crate::{
     auth_manager::{AuthManager, FlowType},
-    cryptography::decrypt_url_safe_base64_with_private_key,
+    cryptography::decrypt_with_private_key,
     error::{AuthenticationError, Error},
     flows::user_login::{LoginCredentials, LoginFlow, UserLogin},
     user::ClientState,
@@ -53,7 +53,7 @@ async fn login_with_credentials(
     auth_manager: Arc<AuthManager>,
 ) -> Result<ClientState, Error> {
     auth_manager.verify_flow::<Option<bool>>(&user_login.key, &headers)?;
-    let credentials: LoginCredentials = decrypt_url_safe_base64_with_private_key::<LoginCredentials>(
+    let credentials: LoginCredentials = decrypt_with_private_key::<LoginCredentials>(
         user_login.encrypted_credentials,
         &auth_manager.encryption_keys.get_private_decryption_key(),
     )?;

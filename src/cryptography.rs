@@ -264,7 +264,6 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
                 )
             }
         };
-    //let mut decrypted_data_buffer = vec![0; private_key.size()];
 
     let decrypted_data_bytes =
         match private_key.decrypt(Pkcs1v15Encrypt, &encrypted_credentials_bytes) {
@@ -275,28 +274,32 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
                 )
             }
         };
-    /* let decrypted_data_len = match decrypted_data.private_decrypt(
-        &encrypted_credentials_bytes,
-        &mut decrypted_data_buffer,
-        Padding::PKCS1_OAEP,
-    ) {
-        Ok(decrypted_data_len) => decrypted_data_len,
-        Err(err) => {
-            return Err(Error::Encryption(EncryptionError::DataDecryption(PKCS1Error(err))).into())
-        }
-    };
-    decrypted_data_buffer.truncate(decrypted_data_len); */
-
-    let decrypted_data_string: String = match String::from_utf8(decrypted_data_bytes) {
-        Ok(decrypted_data_str) => decrypted_data_str,
+    let decrypted_data_struct: T = match serde_json::from_slice::<T>(&decrypted_data_bytes) {
+        Ok(decrypted_data_struct) => decrypted_data_struct,
         Err(err) => {
             return Err(
-                Error::ClientPayload(ClientPayloadError::DataBytesToString(FromUtf8Error(err)))
+                Error::ClientPayload(ClientPayloadError::DataDeserialisation(SerdeError(err)))
                     .into(),
             )
         }
     };
-    let decrypted_data_struct: T = match serde_json::from_str::<T>(&decrypted_data_string) {
+
+    Ok(decrypted_data_struct)
+}
+
+pub fn decrypt_with_private_key<T: DeserializeOwned>(
+    encrypted_data: Vec<u8>,
+    private_key: &RsaPrivateKey,
+) -> Result<T, Error> {
+    let decrypted_data_bytes = match private_key.decrypt(Pkcs1v15Encrypt, &encrypted_data) {
+        Ok(rsa_private) => rsa_private,
+        Err(err) => {
+            return Err(
+                Error::Encryption(EncryptionError::RSAPrivateConversion(RSAError(err))).into(),
+            )
+        }
+    };
+    let decrypted_data_struct: T = match serde_json::from_slice::<T>(&decrypted_data_bytes) {
         Ok(decrypted_data_struct) => decrypted_data_struct,
         Err(err) => {
             return Err(
