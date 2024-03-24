@@ -4,7 +4,8 @@ use crate::{
 };
 use aead::OsRng;
 use email_address::EmailAddress;
-use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
+use rsa::Pkcs1v15Encrypt;
+pub use rsa::RsaPublicKey;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
