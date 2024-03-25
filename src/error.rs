@@ -22,6 +22,7 @@ impl_error_wrapper!(TomlDeError, toml::de::Error);
 impl_error_wrapper!(StdIoError, std::io::Error);
 impl_error_wrapper!(PKCS1Error, pkcs1::Error);
 impl_error_wrapper!(SignatureError, signature::Error);
+impl_error_wrapper!(DecodeError, base64::DecodeError);
 
 //impl_error_wrapper!(AeadError, aead::Error);
 
@@ -85,10 +86,8 @@ pub enum TokenError {
     HeaderDeserialisation(SerdeError),
     #[error("ConvertingBytesToSignature({0})")]
     ConvertingBytesToSignature(SignatureError),
-    #[error("DecodeURLSafeBase64Deserialise({0})")]
-    DecodeURLSafeBase64Deserialise(SerdeError),
-    #[error("EncodeURLSafeBase64Serialise({0})")]
-    EncodeURLSafeBase64Serialise(SerdeError),
+    #[error("DecodeURLSafeBase64({0})")]
+    DecodeURLSafeBase64(DecodeError),
     /* #[error("SerialiseLoginCredentials({0})")]
     SerialiseLoginCredentials(SerdeError), */
 

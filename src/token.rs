@@ -1,4 +1,4 @@
-use crate::error::{Base64DecodeError, Error, SignatureError, TokenError};
+use crate::error::{Base64DecodeError, DecodeError, Error, SignatureError, TokenError};
 use aead::{AeadCore, Nonce, OsRng};
 use aes_gcm::aead::Aead;
 use aes_gcm::Aes256Gcm;
@@ -137,20 +137,27 @@ pub struct Token {
 
 impl Token {
     pub fn from_str(value: &str) -> Result<Self, Error> {
-        match serde_json::from_str::<Self>(value) {
+        let serialised_data = match URL_SAFE_NO_PAD.decode(value) {
+            Ok(token) => token,
+            Err(err) => {
+                return Err(Error::Token(TokenError::DecodeURLSafeBase64(DecodeError(
+                    err,
+                ))))
+            }
+        };
+        match serde_json::from_slice::<Self>(&serialised_data) {
             Ok(token) => Ok(token),
-            Err(err) => Err(Error::Token(TokenError::DecodeURLSafeBase64Deserialise(
-                SerdeError(err),
-            ))),
+            Err(err) => Err(Error::Token(TokenError::DataDeserialisation(SerdeError(
+                err,
+            )))),
         }
     }
     pub fn to_string(&self) -> Result<String, Error> {
-        match serde_json::to_string(self) {
-            Ok(string) => Ok(string),
-            Err(err) => Err(Error::Token(TokenError::EncodeURLSafeBase64Serialise(
-                SerdeError(err),
-            ))),
-        }
+        let serialised_data = match serde_json::to_string(self) {
+            Ok(serialised_data) => serialised_data,
+            Err(err) => return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err)))),
+        };
+        Ok(URL_SAFE_NO_PAD.encode(&serialised_data))
     }
     pub fn create_signed_expiry<T: Serialize + DeserializeOwned>(
         data: T,
