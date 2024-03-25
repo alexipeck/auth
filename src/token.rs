@@ -153,7 +153,7 @@ impl Token {
         }
     }
     pub fn to_string(&self) -> Result<String, Error> {
-        let serialised_data = match serde_json::to_string(self) {
+        let serialised_data = match serde_json::to_vec(self) {
             Ok(serialised_data) => serialised_data,
             Err(err) => return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err)))),
         };

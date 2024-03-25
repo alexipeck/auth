@@ -1,6 +1,6 @@
 use crate::error::{
-    Base64DecodeError, ClientPayloadError, EncryptionError, Error, FromUtf8Error, PKCS1Error,
-    StdIoError, TomlDeError, TomlSerError,
+    Base64DecodeError, ClientPayloadError, EncryptionError, Error, PKCS1Error, StdIoError,
+    TomlDeError, TomlSerError,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use peck_lib::{
@@ -20,7 +20,6 @@ use rsa::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fs;
-use tracing::warn;
 
 pub const TOKEN_CHARSET: [char; 88] = [
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
