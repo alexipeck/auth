@@ -25,6 +25,7 @@ mod tests {
             None,
             encryption_keys.get_signing_key(),
             encryption_keys.get_symmetric_key(),
+            true,
         )
         .unwrap();
         println!("{tokenised}");

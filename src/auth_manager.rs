@@ -455,6 +455,7 @@ impl AuthManager {
                 Some(expiry),
                 self.encryption_keys.get_signing_key(),
                 self.encryption_keys.get_symmetric_key(),
+                true,
             )?
             .to_string(),
             expiry,
@@ -470,6 +471,7 @@ impl AuthManager {
             None,
             self.encryption_keys.get_signing_key(),
             self.encryption_keys.get_symmetric_key(),
+            true,
         )
     }
 

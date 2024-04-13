@@ -24,7 +24,7 @@ struct TokenInnerInner<T> {
     pub data: T,
     #[serde(with = "datetime_utc_option")]
     pub expiry: Option<DateTime<Utc>>,
-    pub _salt: Uuid,
+    pub _salt: Option<Uuid>,
 }
 
 #[derive(Debug, Clone)]
@@ -163,12 +163,13 @@ impl Token {
         data: T,
         expiry: DateTime<Utc>,
         signing_key: &mut SigningKey<Sha256>,
+        salted: bool,
     ) -> Result<String, Error> {
         let serialised_data_base64: String = {
             let data: TokenInnerInner<T> = TokenInnerInner {
                 data,
                 expiry: Some(expiry),
-                _salt: Uuid::new_v4(),
+                _salt: if salted { Some(Uuid::new_v4()) } else { None },
             };
             let serialised_data: String = match serde_json::to_string(&data) {
                 Ok(serialised_data) => serialised_data,
@@ -191,22 +192,25 @@ impl Token {
         lifetime: Duration,
         signing_key: SigningKey<Sha256>,
         symmetric_key: &[u8],
+        salted: bool,
     ) -> Result<String, Error> {
         let expiry: DateTime<Utc> = Utc::now() + lifetime;
-        Self::create_signed_and_encrypted(data, Some(expiry), signing_key, symmetric_key)
+        Self::create_signed_and_encrypted(data, Some(expiry), signing_key, symmetric_key, salted)
     }
+
     pub fn create_signed_and_encrypted<T: Serialize + DeserializeOwned>(
         data: T,
         expiry: Option<DateTime<Utc>>,
         mut signing_key: SigningKey<Sha256>,
         symmetric_key: &[u8],
+        salted: bool,
     ) -> Result<String, Error> {
         let nonce: Nonce<Aes256Gcm> = Aes256Gcm::generate_nonce(&mut OsRng);
         let encrypted_data_base64: String = {
             let data: TokenInnerInner<T> = TokenInnerInner {
                 data,
                 expiry,
-                _salt: Uuid::new_v4(),
+                _salt: if salted { Some(Uuid::new_v4()) } else { None },
             };
             let serialised_data: String = match serde_json::to_string(&data) {
                 Ok(serialised_data) => serialised_data,
