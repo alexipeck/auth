@@ -162,7 +162,7 @@ impl Token {
     pub fn create_signed<T: Serialize + DeserializeOwned>(
         data: T,
         expiry: Option<DateTime<Utc>>,
-        signing_key: &mut SigningKey<Sha256>,
+        mut signing_key: SigningKey<Sha256>,
         salted: bool,
     ) -> Result<String, Error> {
         let serialised_data_base64: String = {
