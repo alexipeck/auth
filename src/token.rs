@@ -159,16 +159,16 @@ impl Token {
         };
         Ok(URL_SAFE_NO_PAD.encode(&serialised_data))
     }
-    pub fn create_signed_expiry<T: Serialize + DeserializeOwned>(
+    pub fn create_signed<T: Serialize + DeserializeOwned>(
         data: T,
-        expiry: DateTime<Utc>,
+        expiry: Option<DateTime<Utc>>,
         signing_key: &mut SigningKey<Sha256>,
         salted: bool,
     ) -> Result<String, Error> {
         let serialised_data_base64: String = {
             let data: TokenInnerInner<T> = TokenInnerInner {
                 data,
-                expiry: Some(expiry),
+                expiry,
                 _salt: if salted { Some(Uuid::new_v4()) } else { None },
             };
             let serialised_data: String = match serde_json::to_string(&data) {
