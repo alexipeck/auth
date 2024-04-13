@@ -248,16 +248,24 @@ impl Token {
     ) -> Result<(T, Option<DateTime<Utc>>), Error> {
         let cipher = Aes256Gcm::new(GenericArray::from_slice(&symmetric_key));
         let deserialised_data_struct = match &self.inner {
-            TokenInner::RSASigned(serialised_data) => {
+            TokenInner::RSASigned(serialised_data_base64) => {
                 if let Err(err) =
-                    verifying_key.verify(serialised_data.as_bytes(), &self.signature.0)
+                    verifying_key.verify(serialised_data_base64.as_bytes(), &self.signature.0)
                 {
                     return Err(Error::Token(TokenError::SignatureVerificationFailed(
                         SignatureError(err),
                     )));
                 };
+                let serialised_data = match URL_SAFE_NO_PAD.decode(serialised_data_base64) {
+                    Ok(encrypted_data) => encrypted_data,
+                    Err(err) => {
+                        return Err(Error::Token(TokenError::Base64Decode(Base64DecodeError(
+                            err,
+                        ))))
+                    }
+                };
                 let deserialised_data_struct: TokenInnerInner<T> =
-                    match serde_json::from_str::<TokenInnerInner<T>>(&serialised_data) {
+                    match serde_json::from_slice::<TokenInnerInner<T>>(&serialised_data) {
                         Ok(decrypted_data_struct) => decrypted_data_struct,
                         Err(err) => {
                             return Err(Error::Token(TokenError::DataDeserialisation(SerdeError(
