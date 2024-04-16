@@ -104,6 +104,7 @@ pub async fn login_with_credentials_route(
                 .path("/")
                 .http_only(false) //Set to true for production
                 .secure(false) //Set to true for production
+                .domain("dev.clouduam.com")
                 .same_site(SameSite::Lax)
                 .max_age(lifetime)
                 .expires(Some((SystemTime::now() + lifetime).into()))
