@@ -102,7 +102,8 @@ pub async fn login_with_credentials_route(
             let lifetime: Duration = Duration::new(172800, 0);
             let cookie = CookieBuilder::new(auth_manager.config.get_cookie_name(), identity_cookie)
                 .path("/")
-                .http_only(true)
+                .http_only(false) //Set to true for production
+                .secure(false) //Set to true for production
                 .same_site(SameSite::Lax)
                 .max_age(lifetime)
                 .expires(Some((SystemTime::now() + lifetime).into()))
