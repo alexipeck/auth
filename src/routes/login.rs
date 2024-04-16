@@ -7,21 +7,26 @@ use crate::{
     user_session::UserSession,
 };
 use axum::{
+    body::Body,
     extract::ConnectInfo,
-    http::{HeaderMap, StatusCode},
-    response::IntoResponse,
+    http::{header::SET_COOKIE, HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
     Extension, Json,
 };
-use chrono::Duration;
+use chrono::Utc;
+use cookie::{
+    time::{Duration, OffsetDateTime},
+    Cookie, CookieBuilder, SameSite,
+};
 use peck_lib::auth::token_pair::TokenPair;
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::SystemTime};
 use tracing::{info, warn};
 
 fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result<LoginFlow, Error> {
     let token_pair: TokenPair = auth_manager.setup_flow_with_lifetime::<Option<bool>>(
         &headers,
         FlowType::Login,
-        Duration::minutes(5),
+        chrono::Duration::minutes(5),
         None,
     )?;
     Ok(LoginFlow::new(
@@ -83,17 +88,52 @@ pub async fn login_with_credentials_route(
     headers: HeaderMap,
     axum::response::Json(user_login): axum::response::Json<UserLogin>,
 ) -> impl IntoResponse {
-    match login_with_credentials(user_login, headers, auth_manager).await {
-        Ok(client_state) => (StatusCode::OK, Json(client_state)).into_response(),
+    match login_with_credentials(user_login, headers, auth_manager.to_owned()).await {
+        Ok(client_state) => {
+            let identity_cookie = match auth_manager
+                .create_signed_and_encrypted_token(client_state.user_profile.user_id)
+            {
+                Ok(identity_cookie) => identity_cookie,
+                Err(err) => {
+                    warn!("{err}");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            };
+            let lifetime: Duration = Duration::new(172800, 0);
+            let cookie = CookieBuilder::new(auth_manager.config.get_cookie_name(), identity_cookie)
+                .path("/")
+                .http_only(true)
+                .same_site(SameSite::Lax)
+                .max_age(lifetime)
+                .expires(Some((SystemTime::now() + lifetime).into()))
+                .build();
+            match Response::builder()
+                .status(StatusCode::OK)
+                .header(SET_COOKIE, cookie.to_string())
+                .body(Body::from(match serde_json::to_string(&client_state) {
+                    Ok(t) => t,
+                    Err(err) => {
+                        warn!("{err}");
+                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    }
+                })) {
+                Ok(response) => response,
+                Err(err) => {
+                    warn!("{err}");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
+            /* (StatusCode::OK, Json(client_state)).into_response() */
+        }
         Err(err) => {
             warn!("{}", err);
-            match err {
+            return match err {
                 Error::Authentication(
                     AuthenticationError::IncorrectCredentials
                     | AuthenticationError::Incorrect2FACode,
                 ) => StatusCode::UNAUTHORIZED.into_response(),
                 _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-            }
+            };
         }
     }
 }
