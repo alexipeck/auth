@@ -61,6 +61,7 @@ pub enum RequiredProperties {
     SMTPPassword,
     DatabaseUrl,
     Port,
+    CookieDomain,
 }
 
 impl fmt::Display for RequiredProperties {
@@ -77,6 +78,7 @@ impl fmt::Display for RequiredProperties {
                 Self::SMTPPassword => "SMTPPassword",
                 Self::DatabaseUrl => "DatabaseUrl",
                 Self::Port => "Port",
+                Self::CookieDomain => "CookieDomain",
             }
         )
     }
@@ -143,6 +145,7 @@ pub struct Builder {
     smtp_username: Option<String>,
     smtp_password: Option<String>,
     port: Option<u16>,
+    cookie_domain: Option<String>,
 
     //optional
     stop: Option<Arc<AtomicBool>>,
@@ -210,6 +213,11 @@ impl Builder {
         self
     }
 
+    pub fn cookie_domain(mut self, cookie_domain: String) -> Self {
+        self.cookie_domain = Some(cookie_domain);
+        self
+    }
+
     pub fn read_lifetime_seconds(mut self, lifetime: i64) -> Self {
         self.read_lifetime_seconds = Some(lifetime);
         self
@@ -251,6 +259,9 @@ impl Builder {
         if self.port.is_none() {
             missing_properties.push(RequiredProperties::Port);
         }
+        if self.cookie_domain.is_none() {
+            missing_properties.push(RequiredProperties::CookieDomain);
+        }
         if !missing_properties.is_empty() {
             return Err(
                 Error::AuthServerBuild(AuthServerBuildError::MissingProperties(format!(
@@ -280,6 +291,7 @@ impl Builder {
             self.smtp_password.unwrap(),
             self.database_url.unwrap(),
             self.port.unwrap(),
+            self.cookie_domain.unwrap(),
             self.uid_authority,
             read_lifetime_seconds,
             write_lifetime_seconds,

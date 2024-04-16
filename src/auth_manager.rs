@@ -147,6 +147,7 @@ pub struct AuthManager {
     pub smtp_manager: SmtpManager,
     pub database_url: String,
     pub port: u16,
+    pub cookie_domain: String, //Should include http:// or https://
 
     write_lifetime_seconds: i64,       //300
     read_lifetime_seconds: i64,        //900
@@ -167,6 +168,7 @@ impl AuthManager {
         smtp_password: String,
         database_url: String,
         port: u16,
+        cookie_domain: String,
         uid_authority: Option<Arc<UIDAuthority>>,
         read_lifetime_seconds: i64,
         write_lifetime_seconds: i64,
@@ -206,6 +208,7 @@ impl AuthManager {
             smtp_manager,
             database_url,
             port,
+            cookie_domain,
             uid_authority,
             write_lifetime_seconds,
             read_lifetime_seconds,
@@ -499,10 +502,7 @@ impl AuthManager {
         self.smtp_manager.send_email_to_recipient(
             "alexinicolaspeck@gmail.com".into(),
             "Invite Link".into(),
-            format!(
-                "http://dev.clouduam.com:81/invite?token={}",
-                token_pair.token
-            ), //https://clouduam.com
+            format!("{}/invite?token={}", &self.cookie_domain, token_pair.token), //https://clouduam.com
         )?;
         Ok(user_id)
     }
