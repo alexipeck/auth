@@ -12,7 +12,7 @@ use crate::{
 };
 use axum::{
     http::{
-        header::{AUTHORIZATION, CONTENT_TYPE, COOKIE},
+        header::{ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE, COOKIE},
         Method,
     },
     routing::{get, post},
@@ -87,8 +87,12 @@ impl fmt::Display for RequiredProperties {
 async fn start_server(auth_server: Arc<AuthServer>) {
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])
-        .allow_headers(vec![CONTENT_TYPE, AUTHORIZATION, COOKIE])
-        /* .allow_origin(AllowOrigin::exact("https://clouduam.com".parse().unwrap())) */
+        .allow_headers(vec![
+            CONTENT_TYPE,
+            AUTHORIZATION,
+            COOKIE,
+            ACCESS_CONTROL_ALLOW_ORIGIN,
+        ])
         .allow_origin(AllowOrigin::exact(
             auth_server
                 .auth_manager
