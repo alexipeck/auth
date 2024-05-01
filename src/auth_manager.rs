@@ -344,7 +344,7 @@ impl AuthManager {
             expiry = read_mode.upgrade(
                 &filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
                     .hash_debug(),
-                self.max_session_lifetime_seconds,
+                self.read_lifetime_seconds,
             )?;
         } else {
             return Err(Error::ReadTokenAsRefreshToken(
