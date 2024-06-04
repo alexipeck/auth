@@ -73,7 +73,7 @@ pub enum TokenInner {
     ///serialised_data
     RSASigned(String),
     ///(encrypted_data_base64, nonce/iv): (String, Nonce<Aes256Gcm>)
-    RSASignedSHA265Encrypted(String, NonceAes256Gcm),
+    RSASignedSHA256Encrypted(String, NonceAes256Gcm),
 }
 
 #[derive(Debug, Clone)]
@@ -232,7 +232,7 @@ impl Token {
         };
         let signature = signing_key.sign(encrypted_data_base64.as_bytes());
         Ok(Self {
-            inner: TokenInner::RSASignedSHA265Encrypted(
+            inner: TokenInner::RSASignedSHA256Encrypted(
                 encrypted_data_base64,
                 NonceAes256Gcm(nonce),
             ),
@@ -276,7 +276,7 @@ impl Token {
                     };
                 deserialised_data_struct
             }
-            TokenInner::RSASignedSHA265Encrypted(encrypted_data_base64, nonce) => {
+            TokenInner::RSASignedSHA256Encrypted(encrypted_data_base64, nonce) => {
                 if let Err(err) =
                     verifying_key.verify(encrypted_data_base64.as_bytes(), &self.signature.0)
                 {
