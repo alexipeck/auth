@@ -73,7 +73,7 @@ impl User {
         two_fa_client_secret: String,
     ) -> Result<(), Error> {
         if !self.incomplete() {
-            return Err(Error::AccountSetup(AccountSetupError::AccountSetupAlreadyComplete).into());
+            return Err(Error::AccountSetup(AccountSetupError::AccountSetupAlreadyComplete));
         }
         let salt = generate_token(32);
         let hashed_and_salted_password = match argon2::hash_encoded(

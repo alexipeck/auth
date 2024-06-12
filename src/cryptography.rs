@@ -205,7 +205,7 @@ impl EncryptionKeys {
             Ok(rsa_private_key) => rsa_private_key,
             Err(err) => {
                 return Err(
-                    Error::Encryption(EncryptionError::GeneratingRSAPrivate(RSAError(err))).into(),
+                    Error::Encryption(EncryptionError::GeneratingRSAPrivate(RSAError(err))),
                 )
             }
         };
@@ -258,8 +258,7 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
                 return Err(
                     Error::ClientPayload(ClientPayloadError::UrlSafeBase64Decode(
                         Base64DecodeError(err),
-                    ))
-                    .into(),
+                    )),
                 )
             }
         };
@@ -269,7 +268,7 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
             Ok(rsa_private) => rsa_private,
             Err(err) => {
                 return Err(
-                    Error::Encryption(EncryptionError::RSAPrivateConversion(RSAError(err))).into(),
+                    Error::Encryption(EncryptionError::RSAPrivateConversion(RSAError(err))),
                 )
             }
         };
@@ -277,8 +276,7 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
         Ok(decrypted_data_struct) => decrypted_data_struct,
         Err(err) => {
             return Err(
-                Error::ClientPayload(ClientPayloadError::DataDeserialisation(SerdeError(err)))
-                    .into(),
+                Error::ClientPayload(ClientPayloadError::DataDeserialisation(SerdeError(err))),
             )
         }
     };
@@ -294,7 +292,7 @@ pub fn decrypt_with_private_key<T: DeserializeOwned>(
         Ok(rsa_private) => rsa_private,
         Err(err) => {
             return Err(
-                Error::Encryption(EncryptionError::RSAPrivateConversion(RSAError(err))).into(),
+                Error::Encryption(EncryptionError::RSAPrivateConversion(RSAError(err))),
             )
         }
     };
@@ -302,8 +300,7 @@ pub fn decrypt_with_private_key<T: DeserializeOwned>(
         Ok(decrypted_data_struct) => decrypted_data_struct,
         Err(err) => {
             return Err(
-                Error::ClientPayload(ClientPayloadError::DataDeserialisation(SerdeError(err)))
-                    .into(),
+                Error::ClientPayload(ClientPayloadError::DataDeserialisation(SerdeError(err))),
             )
         }
     };

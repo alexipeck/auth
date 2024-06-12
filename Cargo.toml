@@ -2,7 +2,7 @@
 authors = ["Alexi Peck <alexinicolaspeck@gmail.com>"]
 edition = "2021"
 name = "auth"
-version = "0.2.2"
+version = "0.2.3"
 
 [dependencies]
 aead = "0.5.2"
@@ -27,7 +27,7 @@ pkcs1 = "0.7.5"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 rand_core = {version = "0.6.4", features = ["getrandom"]}
-regex = "1.10.4"
+regex = "1.10.5"
 rsa = {version = "0.9.6", features = ["sha2", "serde", "std"]}
 rust-argon2 = "2.1.0"
 serde = {version = "1.0.203", features = ["derive"]}

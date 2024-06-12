@@ -13,10 +13,9 @@ use axum::{
     response::{IntoResponse, Response},
     Extension, Json,
 };
-use chrono::Utc;
 use cookie::{
-    time::{Duration, OffsetDateTime},
-    Cookie, CookieBuilder, SameSite,
+    time::Duration,
+    CookieBuilder, SameSite,
 };
 use peck_lib::auth::token_pair::TokenPair;
 use std::{net::SocketAddr, sync::Arc, time::SystemTime};
@@ -60,7 +59,7 @@ async fn login_with_credentials(
     auth_manager.verify_flow::<Option<bool>>(&user_login.key, &headers)?;
     let credentials: LoginCredentials = decrypt_with_private_key::<LoginCredentials>(
         user_login.encrypted_credentials,
-        &auth_manager.encryption_keys.get_private_decryption_key(),
+        auth_manager.encryption_keys.get_private_decryption_key(),
     )?;
     let user_profile = auth_manager
         .validate_user_credentials(
@@ -122,20 +121,20 @@ pub async fn login_with_credentials_route(
                 Ok(response) => response,
                 Err(err) => {
                     warn!("{err}");
-                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
                 }
             }
             /* (StatusCode::OK, Json(client_state)).into_response() */
         }
         Err(err) => {
             warn!("{}", err);
-            return match err {
+            match err {
                 Error::Authentication(
                     AuthenticationError::IncorrectCredentials
                     | AuthenticationError::Incorrect2FACode,
                 ) => StatusCode::UNAUTHORIZED.into_response(),
                 _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-            };
+            }
         }
     }
 }

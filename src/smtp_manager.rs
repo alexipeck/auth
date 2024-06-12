@@ -21,7 +21,7 @@ impl SmtpManager {
             Ok(sender_address) => sender_address,
             Err(err) => {
                 return Err(
-                    Error::Smtp(SmtpError::ServerAddressParse(SmtpAddressError(err))).into(),
+                    Error::Smtp(SmtpError::ServerAddressParse(SmtpAddressError(err))),
                 )
             }
         };
@@ -67,9 +67,9 @@ impl SmtpManager {
             Err(err) => return Err(Error::Smtp(SmtpError::MessageBuilder(LettreError(err)))),
         };
 
-        return match self.mailer.send(&message) {
+        match self.mailer.send(&message) {
             Ok(response) => Ok(response),
             Err(err) => Err(Error::Smtp(SmtpError::MessageSend(SmtpTransportError(err)))),
-        };
+        }
     }
 }

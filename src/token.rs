@@ -35,7 +35,7 @@ impl Serialize for NonceAes256Gcm {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&URL_SAFE_NO_PAD.encode(&self.0.as_slice()))
+        serializer.serialize_str(&URL_SAFE_NO_PAD.encode(self.0.as_slice()))
     }
 }
 
@@ -114,7 +114,7 @@ impl<'de> Deserialize<'de> for SignatureWrapper {
                     Ok(bytes) => match Signature::try_from(bytes.as_slice()) {
                         Ok(signature) => Ok(SignatureWrapper(signature)),
                         Err(err) => {
-                            return Err(E::custom(Error::Token(
+                            Err(E::custom(Error::Token(
                                 TokenError::ConvertingBytesToSignature(SignatureError(err)),
                             )))
                         }
@@ -157,7 +157,7 @@ impl Token {
             Ok(serialised_data) => serialised_data,
             Err(err) => return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err)))),
         };
-        Ok(URL_SAFE_NO_PAD.encode(&serialised_data))
+        Ok(URL_SAFE_NO_PAD.encode(serialised_data))
     }
     pub fn create_signed<T: Serialize + DeserializeOwned>(
         data: T,
@@ -175,17 +175,17 @@ impl Token {
                 Ok(serialised_data) => serialised_data,
                 Err(err) => {
                     warn!("{}", err);
-                    return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err))).into());
+                    return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err))));
                 }
             };
-            URL_SAFE_NO_PAD.encode(&serialised_data)
+            URL_SAFE_NO_PAD.encode(serialised_data)
         };
-        let signature: Signature = signing_key.sign(&serialised_data_base64.as_bytes());
-        Ok(Self {
+        let signature: Signature = signing_key.sign(serialised_data_base64.as_bytes());
+        Self {
             inner: TokenInner::RSASigned(serialised_data_base64),
             signature: SignatureWrapper(signature),
         }
-        .to_string()?)
+        .to_string()
     }
     pub fn create_signed_and_encrypted_lifetime<T: Serialize + DeserializeOwned>(
         data: T,
@@ -216,7 +216,7 @@ impl Token {
                 Ok(serialised_data) => serialised_data,
                 Err(err) => {
                     warn!("{}", err);
-                    return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err))).into());
+                    return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err))));
                 }
             };
 
@@ -225,20 +225,20 @@ impl Token {
                 Ok(encrypted_data) => encrypted_data,
                 Err(err) => {
                     warn!("{}", err);
-                    return Err(Error::Token(TokenError::DataEncryption(err.to_string())).into());
+                    return Err(Error::Token(TokenError::DataEncryption(err.to_string())));
                 }
             };
-            URL_SAFE_NO_PAD.encode(&encrypted_data)
+            URL_SAFE_NO_PAD.encode(encrypted_data)
         };
         let signature = signing_key.sign(encrypted_data_base64.as_bytes());
-        Ok(Self {
+        Self {
             inner: TokenInner::RSASignedSHA256Encrypted(
                 encrypted_data_base64,
                 NonceAes256Gcm(nonce),
             ),
             signature: SignatureWrapper(signature),
         }
-        .to_string()?)
+        .to_string()
     }
 
     pub fn verify_and_decrypt<T: Serialize + DeserializeOwned>(
@@ -270,8 +270,7 @@ impl Token {
                         Err(err) => {
                             return Err(Error::Token(TokenError::DataDeserialisation(SerdeError(
                                 err,
-                            )))
-                            .into())
+                            ))))
                         }
                     };
                 deserialised_data_struct
@@ -297,7 +296,7 @@ impl Token {
                     Err(err) => {
                         warn!("{}", err);
                         return Err(
-                            Error::Token(TokenError::DataDecryption(err.to_string())).into()
+                            Error::Token(TokenError::DataDecryption(err.to_string()))
                         );
                     }
                 };
@@ -307,8 +306,7 @@ impl Token {
                         Err(err) => {
                             return Err(Error::Token(TokenError::DataDeserialisation(SerdeError(
                                 err,
-                            )))
-                            .into())
+                            ))))
                         }
                     };
                 deserialised_data_struct

@@ -54,7 +54,7 @@ impl Default for Regexes {
             "accept-encoding",
         ];
         let roaming_header_profile = RegexSet::new(
-            &keys
+            keys
                 .iter()
                 .map(|&key| format!(r"^{}$", regex::escape(key)))
                 .collect::<Vec<String>>(),
@@ -63,7 +63,7 @@ impl Default for Regexes {
         keys.push("x-real-ip");
         keys.push("x-forwarded-for");
         let restricted_header_profile = RegexSet::new(
-            &keys
+            keys
                 .into_iter()
                 .map(|key| format!(r"^{}$", regex::escape(key)))
                 .collect::<Vec<String>>(),
@@ -181,7 +181,7 @@ impl AuthManager {
         let users = get_all_users(&mut establish_connection(&database_url))?;
         if let Some(uid_authority) = uid_authority.as_ref() {
             uid_authority
-                .insert_bulk(users.keys().map(|uid| *uid).collect::<Vec<Uuid>>())
+                .insert_bulk(users.keys().copied().collect::<Vec<Uuid>>())
                 .await?;
         }
         let email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>> = Arc::new(RwLock::new(
@@ -271,7 +271,7 @@ impl AuthManager {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     pub fn generate_read_token(
@@ -387,7 +387,7 @@ impl AuthManager {
 
     pub fn verify_flow<T: Serialize + DeserializeOwned>(
         &self,
-        token: &String,
+        token: &str,
         headers: &HeaderMap,
     ) -> Result<(T, Option<DateTime<Utc>>), Error> {
         let (flow, expiry): (Flow<T>, Option<DateTime<Utc>>) =
@@ -553,15 +553,15 @@ impl AuthManager {
             }
             Ok((user_id, *read_mode))
         } else {
-            return Err(Error::ReadTokenValidation(
+            Err(Error::ReadTokenValidation(
                 ReadTokenValidationError::NotReadToken,
-            ));
+            ))
         }
     }
 
     pub fn validate_write_token(&self, token: &str, headers: &HeaderMap) -> Result<Uuid, Error> {
         let (read_token, write_token) = {
-            let t: Vec<&str> = token.split(':').into_iter().collect::<Vec<&str>>();
+            let t: Vec<&str> = token.split(':').collect::<Vec<&str>>();
             if t.len() != 2 {
                 return Err(Error::BearerTokenPairInvalidFormat);
             }

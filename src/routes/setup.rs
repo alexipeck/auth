@@ -20,7 +20,7 @@ use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
 
 async fn validate_invite_token(
-    invite_token: &String,
+    invite_token: &str,
     headers: &HeaderMap,
     auth_manager: Arc<AuthManager>,
 ) -> Result<UserSetupFlow, Error> {
@@ -31,7 +31,7 @@ async fn validate_invite_token(
             .await;
         if user_setup_incomplete.is_none() {
             return Err(Error::AccountSetup(AccountSetupError::InvalidInvite));
-        } else if user_setup_incomplete.unwrap() == false {
+        } else if !user_setup_incomplete.unwrap() {
             return Err(Error::AccountSetup(
                 AccountSetupError::AccountSetupAlreadyComplete,
             ));
@@ -106,19 +106,19 @@ async fn setup_user_account(
         .await;
     if user_setup_incomplete.is_none() {
         return Err(Error::AccountSetup(AccountSetupError::InvalidInvite));
-    } else if user_setup_incomplete.unwrap() == false {
+    } else if !user_setup_incomplete.unwrap() {
         return Err(Error::AccountSetup(
             AccountSetupError::AccountSetupAlreadyComplete,
         ));
     }
     let credentials: SetupCredentials = decrypt_url_safe_base64_with_private_key::<SetupCredentials>(
         user_setup.encrypted_credentials.into(),
-        &auth_manager.encryption_keys.get_private_decryption_key(),
+        auth_manager.encryption_keys.get_private_decryption_key(),
     )?;
 
     //2FA
     let auth = GoogleAuthenticator::new();
-    match auth.get_code(&user_invite_instance.get_two_fa_client_secret(), 0) {
+    match auth.get_code(user_invite_instance.get_two_fa_client_secret(), 0) {
         Ok(current_code) => {
             if credentials.two_fa_code != current_code {
                 return Err(Error::AccountSetup(AccountSetupError::Incorrect2FACode));

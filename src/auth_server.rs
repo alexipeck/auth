@@ -271,8 +271,7 @@ impl Builder {
                 Error::AuthServerBuild(AuthServerBuildError::MissingProperties(format!(
                     "{:?}",
                     missing_properties
-                )))
-                .into(),
+                ))),
             );
         }
 
