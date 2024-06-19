@@ -1,4 +1,7 @@
-use crate::auth_manager::AuthManager;
+use crate::{
+    auth_manager::AuthManager,
+    error::{AuthenticationError, Error},
+};
 use axum::{
     extract::ConnectInfo,
     http::{HeaderMap, StatusCode},
@@ -49,7 +52,12 @@ pub async fn get_write_token_route(
         Err(err) => {
             //TODO: Split out into actual correct errors
             warn!("{}", err);
-            StatusCode::UNAUTHORIZED.into_response()
+            match err {
+                Error::Authentication(AuthenticationError::Incorrect2FACode) => {
+                    StatusCode::NOT_ACCEPTABLE.into_response()
+                }
+                _ => StatusCode::UNAUTHORIZED.into_response(),
+            }
         }
     }
 }
