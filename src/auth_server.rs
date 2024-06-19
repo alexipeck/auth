@@ -159,7 +159,6 @@ pub struct Builder {
 }
 
 impl Default for Builder {
-    #[allow(unconditional_recursion)]
     fn default() -> Self {
         Self {
             read_lifetime_seconds: DEFAULT_READ_LIFETIME_SECONDS,
