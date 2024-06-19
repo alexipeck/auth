@@ -116,10 +116,6 @@ async fn start_server(auth_server: Arc<AuthServer>) {
             "/authenticated/get-write-token",
             post(get_write_token_route),
         )
-        /* .route(
-            "/authenticated/twofa-for-write-token",
-            post(get_new_write_token_route),
-        ) */
         /* .route("/logout", post(logout)) */
         /* .layer(TraceLayer::new_for_http()) */
         .layer(cors)
