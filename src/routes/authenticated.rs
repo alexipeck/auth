@@ -9,7 +9,10 @@ use axum_extra::{
     headers::{authorization::Bearer, Authorization},
     TypedHeader,
 };
-use serde::de::{self, Visitor};
+use serde::{
+    de::{self, MapAccess, Visitor},
+    ser::SerializeStruct,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, net::SocketAddr, sync::Arc};
 use tracing::warn;
@@ -41,7 +44,9 @@ impl Serialize for GetWriteTokenQueryParams {
     {
         let two_fa_code_str =
             std::str::from_utf8(&self.two_fa_code).map_err(serde::ser::Error::custom)?;
-        serializer.serialize_str(two_fa_code_str)
+        let mut state = serializer.serialize_struct("GetWriteTokenQueryParams", 1)?;
+        state.serialize_field("two_fa_code", &two_fa_code_str)?;
+        state.end()
     }
 }
 
@@ -56,20 +61,41 @@ impl<'de> Deserialize<'de> for GetWriteTokenQueryParams {
             type Value = GetWriteTokenQueryParams;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a string representing a 6-character 2FA code")
+                formatter.write_str("a struct representing GetWriteTokenQueryParams with a 6-character 2FA code as a string")
             }
 
-            fn visit_str<E>(self, value: &str) -> Result<GetWriteTokenQueryParams, E>
+            fn visit_map<V>(self, mut map: V) -> Result<GetWriteTokenQueryParams, V::Error>
             where
-                E: de::Error,
+                V: MapAccess<'de>,
             {
+                let mut two_fa_code = None;
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_ref() {
+                        "two_fa_code" => {
+                            if two_fa_code.is_some() {
+                                return Err(de::Error::duplicate_field("two_fa_code"));
+                            }
+                            let value: String = map.next_value()?;
+                            two_fa_code = Some(str_to_two_fa(&value).ok_or_else(|| {
+                                de::Error::custom("invalid two_factor_code format")
+                            })?);
+                        }
+                        _ => {
+                            let _: de::IgnoredAny = map.next_value()?;
+                        }
+                    }
+                }
                 let two_fa_code =
-                    str_to_two_fa(value).ok_or_else(|| de::Error::custom("invalid two_fa_code"))?;
+                    two_fa_code.ok_or_else(|| de::Error::missing_field("two_fa_code"))?;
                 Ok(GetWriteTokenQueryParams { two_fa_code })
             }
         }
 
-        deserializer.deserialize_str(GetWriteTokenQueryParamsVisitor)
+        deserializer.deserialize_struct(
+            "GetWriteTokenQueryParams",
+            &["two_fa_code"],
+            GetWriteTokenQueryParamsVisitor,
+        )
     }
 }
 
