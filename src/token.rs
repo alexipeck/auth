@@ -113,11 +113,9 @@ impl<'de> Deserialize<'de> for SignatureWrapper {
                 match URL_SAFE_NO_PAD.decode(value) {
                     Ok(bytes) => match Signature::try_from(bytes.as_slice()) {
                         Ok(signature) => Ok(SignatureWrapper(signature)),
-                        Err(err) => {
-                            Err(E::custom(Error::Token(
-                                TokenError::ConvertingBytesToSignature(SignatureError(err)),
-                            )))
-                        }
+                        Err(err) => Err(E::custom(Error::Token(
+                            TokenError::ConvertingBytesToSignature(SignatureError(err)),
+                        ))),
                     },
                     Err(e) => Err(E::custom(format!("base64 decode error: {}", e))),
                 }
@@ -295,9 +293,7 @@ impl Token {
                     Ok(decrypted_data) => decrypted_data,
                     Err(err) => {
                         warn!("{}", err);
-                        return Err(
-                            Error::Token(TokenError::DataDecryption(err.to_string()))
-                        );
+                        return Err(Error::Token(TokenError::DataDecryption(err.to_string())));
                     }
                 };
                 let deserialised_data_struct: TokenInnerInner<T> =

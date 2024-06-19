@@ -139,7 +139,6 @@ async fn start_server(auth_server: Arc<AuthServer>) {
     }
 }
 
-#[derive(Default)]
 pub struct Builder {
     //required
     cookie_name: Option<String>,
@@ -150,15 +149,29 @@ pub struct Builder {
     smtp_password: Option<String>,
     port: Option<u16>,
     cookie_domain: Option<String>,
+    database_url: Option<String>,
 
     //optional
     stop: Option<Arc<AtomicBool>>,
     stop_notify: Option<Arc<Notify>>,
-    database_url: Option<String>,
     uid_authority: Option<Arc<UIDAuthority>>,
-    read_lifetime_seconds: Option<i64>,
-    write_lifetime_seconds: Option<i64>,
-    max_session_lifetime_seconds: Option<i64>,
+
+    //defaulted
+    read_lifetime_seconds: i64,
+    write_lifetime_seconds: i64,
+    max_session_lifetime_seconds: i64,
+}
+
+impl Default for Builder {
+    #[allow(unconditional_recursion)]
+    fn default() -> Self {
+        Self {
+            read_lifetime_seconds: DEFAULT_READ_LIFETIME_SECONDS,
+            write_lifetime_seconds: DEFAULT_WRITE_LIFETIME_SECONDS,
+            max_session_lifetime_seconds: DEFAULT_MAX_SESSION_LIFETIME_SECONDS,
+            ..Default::default()
+        }
+    }
 }
 
 impl Builder {
@@ -223,17 +236,17 @@ impl Builder {
     }
 
     pub fn read_lifetime_seconds(mut self, lifetime: i64) -> Self {
-        self.read_lifetime_seconds = Some(lifetime);
+        self.read_lifetime_seconds = lifetime;
         self
     }
 
     pub fn write_lifetime_seconds(mut self, lifetime: i64) -> Self {
-        self.write_lifetime_seconds = Some(lifetime);
+        self.write_lifetime_seconds = lifetime;
         self
     }
 
     pub fn max_session_lifetime_seconds(mut self, lifetime: i64) -> Self {
-        self.max_session_lifetime_seconds = Some(lifetime);
+        self.max_session_lifetime_seconds = lifetime;
         self
     }
 
@@ -267,23 +280,10 @@ impl Builder {
             missing_properties.push(RequiredProperties::CookieDomain);
         }
         if !missing_properties.is_empty() {
-            return Err(
-                Error::AuthServerBuild(AuthServerBuildError::MissingProperties(format!(
-                    "{:?}",
-                    missing_properties
-                ))),
-            );
+            return Err(Error::AuthServerBuild(
+                AuthServerBuildError::MissingProperties(format!("{:?}", missing_properties)),
+            ));
         }
-
-        let read_lifetime_seconds = self
-            .read_lifetime_seconds
-            .unwrap_or(DEFAULT_READ_LIFETIME_SECONDS);
-        let write_lifetime_seconds = self
-            .write_lifetime_seconds
-            .unwrap_or(DEFAULT_WRITE_LIFETIME_SECONDS);
-        let max_session_lifetime_seconds = self
-            .max_session_lifetime_seconds
-            .unwrap_or(DEFAULT_MAX_SESSION_LIFETIME_SECONDS);
 
         let auth_manager: AuthManager = AuthManager::new(
             self.cookie_name.unwrap(),
@@ -296,9 +296,9 @@ impl Builder {
             self.port.unwrap(),
             self.cookie_domain.unwrap(),
             self.uid_authority,
-            read_lifetime_seconds,
-            write_lifetime_seconds,
-            max_session_lifetime_seconds,
+            self.read_lifetime_seconds,
+            self.write_lifetime_seconds,
+            self.max_session_lifetime_seconds,
         )
         .await?;
         let signals = Signals {

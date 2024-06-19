@@ -1,6 +1,6 @@
 use crate::auth_manager::AuthManager;
 use axum::{
-    extract::ConnectInfo,
+    extract::{ConnectInfo, Query},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Extension, Json,
@@ -9,6 +9,7 @@ use axum_extra::{
     headers::{authorization::Bearer, Authorization},
     TypedHeader,
 };
+use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
 
@@ -28,15 +29,20 @@ pub async fn refresh_read_token_route(
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct GetWriteTokenQueryParams {
+    two_fa_code: [u8; 6],
+}
+
 pub async fn get_write_token_route(
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
     TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
-    axum::response::Json(two_fa_code): axum::response::Json<String>,
+    Query(query_params): Query<GetWriteTokenQueryParams>,
 ) -> impl IntoResponse {
     match auth_manager
-        .generate_write_token(authorisation.token(), two_fa_code, &headers)
+        .generate_write_token(authorisation.token(), &query_params.two_fa_code, &headers)
         .await
     {
         Ok(token_pair) => (StatusCode::OK, Json(token_pair)).into_response(),

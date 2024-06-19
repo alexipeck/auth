@@ -204,9 +204,9 @@ impl EncryptionKeys {
         let rsa_private_key: RsaPrivateKey = match RsaPrivateKey::new(&mut rng, 2048) {
             Ok(rsa_private_key) => rsa_private_key,
             Err(err) => {
-                return Err(
-                    Error::Encryption(EncryptionError::GeneratingRSAPrivate(RSAError(err))),
-                )
+                return Err(Error::Encryption(EncryptionError::GeneratingRSAPrivate(
+                    RSAError(err),
+                )))
             }
         };
         let rsa_public_key: RsaPublicKey = rsa_private_key.to_public_key();
@@ -255,11 +255,9 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
         match URL_SAFE_NO_PAD.decode(encrypted_url_safe_base64_data) {
             Ok(encrypted_data_bytes) => encrypted_data_bytes,
             Err(err) => {
-                return Err(
-                    Error::ClientPayload(ClientPayloadError::UrlSafeBase64Decode(
-                        Base64DecodeError(err),
-                    )),
-                )
+                return Err(Error::ClientPayload(
+                    ClientPayloadError::UrlSafeBase64Decode(Base64DecodeError(err)),
+                ))
             }
         };
 
@@ -267,17 +265,17 @@ pub fn decrypt_url_safe_base64_with_private_key<T: DeserializeOwned>(
         match private_key.decrypt(Pkcs1v15Encrypt, &encrypted_credentials_bytes) {
             Ok(rsa_private) => rsa_private,
             Err(err) => {
-                return Err(
-                    Error::Encryption(EncryptionError::RSAPrivateConversion(RSAError(err))),
-                )
+                return Err(Error::Encryption(EncryptionError::RSAPrivateConversion(
+                    RSAError(err),
+                )))
             }
         };
     let decrypted_data_struct: T = match serde_json::from_slice::<T>(&decrypted_data_bytes) {
         Ok(decrypted_data_struct) => decrypted_data_struct,
         Err(err) => {
-            return Err(
-                Error::ClientPayload(ClientPayloadError::DataDeserialisation(SerdeError(err))),
-            )
+            return Err(Error::ClientPayload(
+                ClientPayloadError::DataDeserialisation(SerdeError(err)),
+            ))
         }
     };
 
@@ -291,17 +289,17 @@ pub fn decrypt_with_private_key<T: DeserializeOwned>(
     let decrypted_data_bytes = match private_key.decrypt(Pkcs1v15Encrypt, &encrypted_data) {
         Ok(rsa_private) => rsa_private,
         Err(err) => {
-            return Err(
-                Error::Encryption(EncryptionError::RSAPrivateConversion(RSAError(err))),
-            )
+            return Err(Error::Encryption(EncryptionError::RSAPrivateConversion(
+                RSAError(err),
+            )))
         }
     };
     let decrypted_data_struct: T = match serde_json::from_slice::<T>(&decrypted_data_bytes) {
         Ok(decrypted_data_struct) => decrypted_data_struct,
         Err(err) => {
-            return Err(
-                Error::ClientPayload(ClientPayloadError::DataDeserialisation(SerdeError(err))),
-            )
+            return Err(Error::ClientPayload(
+                ClientPayloadError::DataDeserialisation(SerdeError(err)),
+            ))
         }
     };
 

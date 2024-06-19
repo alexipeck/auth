@@ -73,7 +73,9 @@ impl User {
         two_fa_client_secret: String,
     ) -> Result<(), Error> {
         if !self.incomplete() {
-            return Err(Error::AccountSetup(AccountSetupError::AccountSetupAlreadyComplete));
+            return Err(Error::AccountSetup(
+                AccountSetupError::AccountSetupAlreadyComplete,
+            ));
         }
         let salt = generate_token(32);
         let hashed_and_salted_password = match argon2::hash_encoded(
@@ -101,10 +103,11 @@ impl User {
     pub fn get_hashed_and_salted_password(&self) -> &String {
         &self.hashed_and_salted_password
     }
-    pub fn validate_two_fa_code(&self, two_fa_code: &str) -> Result<(), Error> {
+    pub fn validate_two_fa_code(&self, two_fa_code: &[u8; 6]) -> Result<(), Error> {
         let auth = GoogleAuthenticator::new();
         match auth.get_code(&self.two_fa_client_secret, 0) {
             Ok(current_code) => {
+                let two_fa_code: String = String::from_utf8(two_fa_code.to_vec()).unwrap();
                 if two_fa_code == current_code {
                     Ok(())
                 } else {

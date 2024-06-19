@@ -13,10 +13,7 @@ use axum::{
     response::{IntoResponse, Response},
     Extension, Json,
 };
-use cookie::{
-    time::Duration,
-    CookieBuilder, SameSite,
-};
+use cookie::{time::Duration, CookieBuilder, SameSite};
 use peck_lib::auth::token_pair::TokenPair;
 use std::{net::SocketAddr, sync::Arc, time::SystemTime};
 use tracing::{info, warn};
@@ -65,7 +62,7 @@ async fn login_with_credentials(
         .validate_user_credentials(
             &credentials.email,
             &credentials.password,
-            credentials.two_fa_code,
+            &credentials.two_fa_code,
         )
         .await?;
     let user_session =

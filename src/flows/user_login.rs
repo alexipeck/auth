@@ -28,7 +28,7 @@ impl LoginFlow {
 pub struct LoginCredentials {
     pub email: EmailAddress,
     pub password: String,
-    pub two_fa_code: String,
+    pub two_fa_code: [u8; 6],
 }
 
 #[derive(Serialize, Deserialize, Debug)]

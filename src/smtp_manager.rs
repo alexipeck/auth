@@ -20,9 +20,9 @@ impl SmtpManager {
         let sender_address: Mailbox = match sender_address.parse() {
             Ok(sender_address) => sender_address,
             Err(err) => {
-                return Err(
-                    Error::Smtp(SmtpError::ServerAddressParse(SmtpAddressError(err))),
-                )
+                return Err(Error::Smtp(SmtpError::ServerAddressParse(
+                    SmtpAddressError(err),
+                )))
             }
         };
         let smtp_transport_builder: SmtpTransportBuilder = match SmtpTransport::relay(&server) {

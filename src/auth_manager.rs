@@ -54,8 +54,7 @@ impl Default for Regexes {
             "accept-encoding",
         ];
         let roaming_header_profile = RegexSet::new(
-            keys
-                .iter()
+            keys.iter()
                 .map(|&key| format!(r"^{}$", regex::escape(key)))
                 .collect::<Vec<String>>(),
         )
@@ -63,8 +62,7 @@ impl Default for Regexes {
         keys.push("x-real-ip");
         keys.push("x-forwarded-for");
         let restricted_header_profile = RegexSet::new(
-            keys
-                .into_iter()
+            keys.into_iter()
                 .map(|key| format!(r"^{}$", regex::escape(key)))
                 .collect::<Vec<String>>(),
         )
@@ -365,12 +363,12 @@ impl AuthManager {
     pub async fn generate_write_token(
         &self,
         read_token: &str,
-        two_fa_code: String,
+        two_fa_code: &[u8; 6],
         headers: &HeaderMap,
     ) -> Result<TokenPair, Error> {
         let (user_id, read_internal) = self.validate_read_token(read_token, headers)?;
         if let Some(user) = self.users.read().await.get(&user_id) {
-            user.validate_two_fa_code(&two_fa_code)?;
+            user.validate_two_fa_code(two_fa_code)?;
         } else {
             return Err(Error::Authentication(AuthenticationError::UserNotFound(
                 user_id,
@@ -601,7 +599,7 @@ impl AuthManager {
         &self,
         email: &EmailAddress,
         password: &String,
-        two_fa_code: String,
+        two_fa_code: &[u8; 6],
     ) -> Result<UserProfile, Error> {
         match self.email_to_id_registry.read().await.get(email) {
             Some(user_id) => match self.users.read().await.get(user_id) {
@@ -617,7 +615,7 @@ impl AuthManager {
                     ) {
                         Ok(verified) => {
                             if verified {
-                                user.validate_two_fa_code(&two_fa_code)?;
+                                user.validate_two_fa_code(two_fa_code)?;
                                 Ok(user.to_user_profile())
                             } else {
                                 Err(Error::Authentication(
