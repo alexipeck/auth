@@ -161,10 +161,21 @@ pub struct Builder {
 impl Default for Builder {
     fn default() -> Self {
         Self {
+            cookie_name: None,
+            allowed_origin: None,
+            smtp_server: None,
+            smtp_sender_address: None,
+            smtp_username: None,
+            smtp_password: None,
+            port: None,
+            cookie_domain: None,
+            database_url: None,
+            stop: None,
+            stop_notify: None,
+            uid_authority: None,
             read_lifetime_seconds: DEFAULT_READ_LIFETIME_SECONDS,
             write_lifetime_seconds: DEFAULT_WRITE_LIFETIME_SECONDS,
             max_session_lifetime_seconds: DEFAULT_MAX_SESSION_LIFETIME_SECONDS,
-            ..Default::default()
         }
     }
 }
