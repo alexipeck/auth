@@ -131,7 +131,7 @@ pub enum TokenError {
 
 #[derive(Error, Debug)]
 pub enum LoginError {
-    #[error("KeysDontMatch")]
+    #[error("HeaderKeysDontMatch")]
     HeaderKeysDontMatch,
 }
 

@@ -394,6 +394,8 @@ impl AuthManager {
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
 
         let key: String = headers.hash_debug();
+        println!("{:?}", key);
+        println!("{:?}", flow.get_header_key());
         if &key != flow.get_header_key() {
             return Err(Error::Login(LoginError::HeaderKeysDontMatch));
         }
