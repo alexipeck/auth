@@ -35,7 +35,7 @@ pub struct Regexes {
 impl Default for Regexes {
     fn default() -> Self {
         let mut keys = vec![
-            /* "host", */
+            "host",
             "user-agent",
             /* "x-forwarded-host", */
             "x-forwarded-proto",
