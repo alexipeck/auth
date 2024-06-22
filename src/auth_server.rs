@@ -104,18 +104,22 @@ async fn start_server(auth_server: Arc<AuthServer>) {
         .allow_credentials(true);
 
     let app = Router::new()
-        .route("/login/init-login-flow", get(init_login_flow_route))
-        .route("/debug", post(debug_route))
-        .route("/login/credentials", post(login_with_credentials_route))
-        .route("/setup/init-setup-flow", post(validate_invite_token_route))
-        .route("/setup/credentials", post(setup_user_account_route))
-        .route(
-            "/authenticated/refresh-read-token",
-            get(refresh_read_token_route),
-        )
-        .route(
-            "/authenticated/get-write-token",
-            post(get_write_token_route),
+        .nest(
+            "/auth",
+            Router::new()
+                .route("/login/init-login-flow", get(init_login_flow_route))
+                .route("/debug", post(debug_route))
+                .route("/login/credentials", post(login_with_credentials_route))
+                .route("/setup/init-setup-flow", post(validate_invite_token_route))
+                .route("/setup/credentials", post(setup_user_account_route))
+                .route(
+                    "/authenticated/refresh-read-token",
+                    get(refresh_read_token_route),
+                )
+                .route(
+                    "/authenticated/get-write-token",
+                    post(get_write_token_route),
+                ),
         )
         /* .route("/logout", post(logout)) */
         /* .layer(TraceLayer::new_for_http()) */
