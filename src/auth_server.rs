@@ -119,12 +119,12 @@ async fn start_server(auth_server: Arc<AuthServer>) {
                 .route(
                     "/authenticated/get-write-token",
                     post(get_write_token_route),
-                ),
+                )
+                .layer(cors)
+                .layer(Extension(auth_server.auth_manager.to_owned())),
         )
         /* .route("/logout", post(logout)) */
-        /* .layer(TraceLayer::new_for_http()) */
-        .layer(cors)
-        .layer(Extension(auth_server.auth_manager.to_owned()));
+        /* .layer(TraceLayer::new_for_http()) */;
 
     let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], auth_server.auth_manager.port));
     let listener = TcpListener::bind(addr).await.unwrap();
