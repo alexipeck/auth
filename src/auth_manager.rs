@@ -41,7 +41,7 @@ impl Default for Regexes {
             "x-forwarded-proto",
             "x-forwarded-port",
             "referer",
-            "origin",
+            /* "origin", */
             "sec-ch-ua",
             "sec-ch-ua-mobile",
             "sec-ch-ua-platform",
@@ -240,8 +240,6 @@ impl AuthManager {
     ) -> Result<TokenPair, Error> {
         let headers =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
-
-        println!("{:?}", headers);
         let key: String = headers.hash_debug();
         let flow: Flow<T> = Flow::new(key, r#type, data);
         self.create_signed_and_encrypted_token_with_expiry(flow, expiry)
@@ -396,7 +394,6 @@ impl AuthManager {
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
 
         let key: String = headers.hash_debug();
-        println!("{:?}", headers);
         if &key != flow.get_header_key() {
             return Err(Error::Login(LoginError::HeaderKeysDontMatch));
         }
