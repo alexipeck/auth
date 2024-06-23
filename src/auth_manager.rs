@@ -24,7 +24,7 @@ use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 pub struct Regexes {
@@ -240,6 +240,7 @@ impl AuthManager {
     ) -> Result<TokenPair, Error> {
         let headers =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
+        debug!("{:?}", header);
         let key: String = headers.hash_debug();
         let flow: Flow<T> = Flow::new(key, r#type, data);
         self.create_signed_and_encrypted_token_with_expiry(flow, expiry)
@@ -278,11 +279,12 @@ impl AuthManager {
         session_id: Uuid,
         user_id: Uuid,
     ) -> Result<TokenPair, Error> {
+        let headers = filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
+        debug!("{:?}", header);
         self.create_signed_and_encrypted_token_with_lifetime(
             UserToken::new(
                 TokenMode::Read(Box::new(ReadInternal::new(
-                    filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
-                        .hash_debug(),
+                    headers.hash_debug(),
                     session_id,
                     Duration::seconds(self.max_session_lifetime_seconds),
                     self.max_read_iterations,
@@ -299,9 +301,10 @@ impl AuthManager {
         session_id: Uuid,
         user_id: Uuid,
     ) -> Result<(TokenPair, TokenPair), Error> {
+        let headers = filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
+        debug!("{:?}", header);
         let read_internal: ReadInternal = ReadInternal::new(
-            filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
-                .hash_debug(),
+            headers.hash_debug(),
             session_id,
             Duration::seconds(self.max_session_lifetime_seconds),
             self.max_read_iterations,
@@ -338,12 +341,10 @@ impl AuthManager {
         }
         let (user_id, mut token_mode) = user_token.extract();
         let expiry: DateTime<Utc>;
+        let headers = filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
+        debug!("{:?}", header);
         if let TokenMode::Read(read_mode) = &mut token_mode {
-            expiry = read_mode.upgrade(
-                &filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
-                    .hash_debug(),
-                self.read_lifetime_seconds,
-            )?;
+            expiry = read_mode.upgrade(&headers.hash_debug(), self.read_lifetime_seconds)?;
         } else {
             return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::NotReadToken,
@@ -392,6 +393,7 @@ impl AuthManager {
             self.verify_and_decrypt::<Flow<T>>(token)?;
         let headers: std::collections::BTreeMap<String, HeaderValue> =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
+        debug!("{:?}", header);
 
         let key: String = headers.hash_debug();
         if &key != flow.get_header_key() {
@@ -541,10 +543,10 @@ impl AuthManager {
         let (user_token, _) = self.verify_and_decrypt::<UserToken>(token)?;
         let (user_id, token_mode) = user_token.extract();
         if let TokenMode::Read(read_mode) = token_mode {
-            if read_mode.get_headers_hash()
-                != &filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
-                    .hash_debug()
-            {
+            let headers =
+                filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
+            debug!("{:?}", header);
+            if read_mode.get_headers_hash() != &headers.hash_debug() {
                 return Err(Error::ReadTokenValidation(
                     ReadTokenValidationError::InvalidHeaders,
                 ));
@@ -574,10 +576,10 @@ impl AuthManager {
             ));
         }
         if let TokenMode::Write(write_mode) = token_mode {
-            if write_mode.get_headers_hash()
-                != &filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
-                    .hash_debug()
-            {
+            let headers =
+                filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
+            debug!("{:?}", header);
+            if write_mode.get_headers_hash() != &headers.hash_debug() {
                 return Err(Error::WriteTokenValidation(
                     WriteTokenValidationError::InvalidHeaders,
                 ));
