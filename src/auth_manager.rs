@@ -60,7 +60,7 @@ impl Default for Regexes {
         )
         .unwrap();
         keys.push("x-real-ip");
-        //keys.push("x-forwarded-for"); //TODO: try to add this back
+        keys.push("x-forwarded-for");
         let restricted_header_profile = RegexSet::new(
             keys.into_iter()
                 .map(|key| format!(r"^{}$", regex::escape(key)))
@@ -240,7 +240,7 @@ impl AuthManager {
     ) -> Result<TokenPair, Error> {
         let headers =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
-        debug!("{:?}", headers);
+        debug!("setup_flow_with_expiry: {:?}", headers);
         let key: String = headers.hash_debug();
         let flow: Flow<T> = Flow::new(key, r#type, data);
         self.create_signed_and_encrypted_token_with_expiry(flow, expiry)
@@ -280,7 +280,7 @@ impl AuthManager {
         user_id: Uuid,
     ) -> Result<TokenPair, Error> {
         let headers = filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
-        debug!("{:?}", headers);
+        debug!("generate_read_token: {:?}", headers);
         self.create_signed_and_encrypted_token_with_lifetime(
             UserToken::new(
                 TokenMode::Read(Box::new(ReadInternal::new(
@@ -302,7 +302,7 @@ impl AuthManager {
         user_id: Uuid,
     ) -> Result<(TokenPair, TokenPair), Error> {
         let headers = filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
-        debug!("{:?}", headers);
+        debug!("generate_read_and_write_token: {:?}", headers);
         let read_internal: ReadInternal = ReadInternal::new(
             headers.hash_debug(),
             session_id,
@@ -342,7 +342,7 @@ impl AuthManager {
         let (user_id, mut token_mode) = user_token.extract();
         let expiry: DateTime<Utc>;
         let headers = filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
-        debug!("{:?}", headers);
+        debug!("refresh_read_token: {:?}", headers);
         if let TokenMode::Read(read_mode) = &mut token_mode {
             expiry = read_mode.upgrade(&headers.hash_debug(), self.read_lifetime_seconds)?;
         } else {
@@ -393,7 +393,7 @@ impl AuthManager {
             self.verify_and_decrypt::<Flow<T>>(token)?;
         let headers: std::collections::BTreeMap<String, HeaderValue> =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
-        debug!("{:?}", headers);
+        debug!("Verify flow: {:?}", headers);
 
         let key: String = headers.hash_debug();
         if &key != flow.get_header_key() {
@@ -545,7 +545,7 @@ impl AuthManager {
         if let TokenMode::Read(read_mode) = token_mode {
             let headers =
                 filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
-            debug!("{:?}", headers);
+            debug!("validate_read_token: {:?}", headers);
             if read_mode.get_headers_hash() != &headers.hash_debug() {
                 return Err(Error::ReadTokenValidation(
                     ReadTokenValidationError::InvalidHeaders,
@@ -578,7 +578,7 @@ impl AuthManager {
         if let TokenMode::Write(write_mode) = token_mode {
             let headers =
                 filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
-            debug!("{:?}", headers);
+            debug!("validate_write_token: {:?}", headers);
             if write_mode.get_headers_hash() != &headers.hash_debug() {
                 return Err(Error::WriteTokenValidation(
                     WriteTokenValidationError::InvalidHeaders,
