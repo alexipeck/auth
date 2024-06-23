@@ -60,7 +60,7 @@ impl Default for Regexes {
         )
         .unwrap();
         keys.push("x-real-ip");
-        keys.push("x-forwarded-for");
+        //keys.push("x-forwarded-for"); //TODO: try to add this back
         let restricted_header_profile = RegexSet::new(
             keys.into_iter()
                 .map(|key| format!(r"^{}$", regex::escape(key)))
