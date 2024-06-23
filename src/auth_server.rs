@@ -119,10 +119,10 @@ async fn start_server(auth_server: Arc<AuthServer>) {
                 .route(
                     "/authenticated/get-write-token",
                     post(get_write_token_route),
-                )
-                .layer(cors)
-                .layer(Extension(auth_server.auth_manager.to_owned())),
+                ),
         )
+        .layer(cors)
+        .layer(Extension(auth_server.auth_manager.to_owned()))
         /* .route("/logout", post(logout)) */
         /* .layer(TraceLayer::new_for_http()) */;
 
