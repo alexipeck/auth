@@ -40,7 +40,6 @@ impl Default for Regexes {
             /* "x-forwarded-host", */
             "x-forwarded-proto",
             "x-forwarded-port",
-            "referer",
             /* "origin", */
             "sec-ch-ua",
             "sec-ch-ua-mobile",
@@ -61,6 +60,7 @@ impl Default for Regexes {
         .unwrap();
         keys.push("x-real-ip");
         keys.push("x-forwarded-for");
+        keys.push("referer");
         let restricted_header_profile = RegexSet::new(
             keys.into_iter()
                 .map(|key| format!(r"^{}$", regex::escape(key)))
