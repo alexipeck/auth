@@ -259,7 +259,6 @@ impl AuthManager {
     ) -> Result<TokenPair, Error> {
         let headers =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
-        debug!("setup_flow_with_expiry: restricted: {:?}", headers);
         let key: String = headers.hash_debug();
         let flow: Flow<T> = Flow::new(key, r#type, data);
         self.create_signed_and_encrypted_token_with_expiry(flow, expiry)
@@ -409,7 +408,6 @@ impl AuthManager {
             self.verify_and_decrypt::<Flow<T>>(token)?;
         let headers: std::collections::BTreeMap<String, HeaderValue> =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
-        debug!("verify_flow: restricted: {:?}", headers);
 
         let key: String = headers.hash_debug();
         if &key != flow.get_header_key() {
