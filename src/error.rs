@@ -1,4 +1,3 @@
-use axum::http::header::InvalidHeaderValue;
 use email_address::EmailAddress;
 use google_authenticator::GAError;
 use peck_lib::{
@@ -23,6 +22,7 @@ impl_error_wrapper!(StdIoError, std::io::Error);
 impl_error_wrapper!(PKCS1Error, pkcs1::Error);
 impl_error_wrapper!(SignatureError, signature::Error);
 impl_error_wrapper!(DecodeError, base64::DecodeError);
+impl_error_wrapper!(InvalidHeaderValue, axum::http::header::InvalidHeaderValue);
 
 //impl_error_wrapper!(AeadError, aead::Error);
 
@@ -167,8 +167,8 @@ pub enum AccountSetupError {
 
 #[derive(Error, Debug)]
 pub enum StartupError {
-    #[error("InvalidOrigin({0})")]
-    InvalidOrigin(#[from] InvalidHeaderValue),
+    #[error("InvalidOrigin({0}: {1})")]
+    InvalidOrigin(InvalidHeaderValue, String),
 }
 
 #[derive(Error, Debug)]

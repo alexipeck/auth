@@ -1,9 +1,11 @@
 use crate::{
+    auth_server::RequiredProperties,
     cryptography::EncryptionKeys,
     database::{establish_connection, get_all_users, save_user, update_user},
     error::{
-        AccountSetupError, AuthenticationError, Error, LoginError, ReadTokenAsRefreshTokenError,
-        ReadTokenValidationError, StartupError, TokenError, WriteTokenValidationError,
+        AccountSetupError, AuthServerBuildError, AuthenticationError, Error, LoginError,
+        ReadTokenAsRefreshTokenError, ReadTokenValidationError, StartupError, TokenError,
+        WriteTokenValidationError,
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
@@ -77,21 +79,21 @@ impl Default for Regexes {
 
 pub struct Config {
     cookie_name: String,
-    allowed_origin: HeaderValue,
+    allowed_origins: Vec<HeaderValue>,
 }
 
 impl Config {
-    pub fn new(cookie_name: String, allowed_origin: HeaderValue) -> Self {
+    pub fn new(cookie_name: String, allowed_origins: Vec<HeaderValue>) -> Self {
         Self {
             cookie_name,
-            allowed_origin,
+            allowed_origins,
         }
     }
     pub fn get_cookie_name(&self) -> &String {
         &self.cookie_name
     }
-    pub fn get_allowed_origin(&self) -> &HeaderValue {
-        &self.allowed_origin
+    pub fn get_allowed_origin(&self) -> &Vec<HeaderValue> {
+        &self.allowed_origins
     }
 }
 
@@ -159,7 +161,7 @@ pub struct AuthManager {
 impl AuthManager {
     pub async fn new(
         cookie_name: String,
-        allowed_origin: String,
+        allowed_origins: Vec<String>,
         smtp_server: String,
         smtp_sender_address: String,
         smtp_username: String,
@@ -172,10 +174,27 @@ impl AuthManager {
         write_lifetime_seconds: i64,
         max_session_lifetime_seconds: i64,
     ) -> Result<Self, Error> {
-        let allowed_origin: HeaderValue = match allowed_origin.parse() {
-            Ok(allowed_origin) => allowed_origin,
-            Err(err) => return Err(Error::Startup(StartupError::InvalidOrigin(err.into()))),
-        };
+        if allowed_origins.is_empty() {
+            return Err(Error::AuthServerBuild(
+                AuthServerBuildError::MissingProperties(format!(
+                    "{:?}",
+                    RequiredProperties::AllowedOrigin
+                )),
+            ));
+        }
+        let mut allowed_origins_: Vec<HeaderValue> = Vec::new();
+        for allowed_origin in allowed_origins.into_iter() {
+            let allowed_origin_: HeaderValue = match allowed_origin.parse() {
+                Ok(allowed_origin) => allowed_origin,
+                Err(err) => {
+                    return Err(Error::Startup(StartupError::InvalidOrigin(
+                        err.into(),
+                        allowed_origin,
+                    )))
+                }
+            };
+            allowed_origins_.push(allowed_origin_);
+        }
         let users = get_all_users(&mut establish_connection(&database_url))?;
         if let Some(uid_authority) = uid_authority.as_ref() {
             uid_authority
@@ -201,7 +220,7 @@ impl AuthManager {
             users,
             email_to_id_registry,
             regexes: Regexes::default(),
-            config: Config::new(cookie_name, allowed_origin),
+            config: Config::new(cookie_name, allowed_origins_),
             encryption_keys,
             smtp_manager,
             database_url,

@@ -94,7 +94,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
             ACCESS_CONTROL_ALLOW_ORIGIN,
             ORIGIN,
         ])
-        .allow_origin(AllowOrigin::exact(
+        .allow_origin(AllowOrigin::list(
             auth_server
                 .auth_manager
                 .config
@@ -145,7 +145,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
 pub struct Builder {
     //required
     cookie_name: Option<String>,
-    allowed_origin: Option<String>,
+    allowed_origins: Vec<String>,
     smtp_server: Option<String>,
     smtp_sender_address: Option<String>,
     smtp_username: Option<String>,
@@ -169,7 +169,7 @@ impl Default for Builder {
     fn default() -> Self {
         Self {
             cookie_name: None,
-            allowed_origin: None,
+            allowed_origins: Vec::new(),
             smtp_server: None,
             smtp_sender_address: None,
             smtp_username: None,
@@ -199,7 +199,7 @@ impl Builder {
     }
 
     pub fn allowed_origin(mut self, allowed_origin: String) -> Self {
-        self.allowed_origin = Some(allowed_origin);
+        self.allowed_origins.push(allowed_origin);
         self
     }
 
@@ -268,7 +268,7 @@ impl Builder {
         if self.cookie_name.is_none() {
             missing_properties.push(RequiredProperties::CookieName);
         }
-        if self.allowed_origin.is_none() {
+        if self.allowed_origins.is_empty() {
             missing_properties.push(RequiredProperties::AllowedOrigin);
         }
         if self.smtp_server.is_none() {
@@ -300,7 +300,7 @@ impl Builder {
 
         let auth_manager: AuthManager = AuthManager::new(
             self.cookie_name.unwrap(),
-            self.allowed_origin.unwrap(),
+            self.allowed_origins,
             self.smtp_server.unwrap(),
             self.smtp_sender_address.unwrap(),
             self.smtp_username.unwrap(),
