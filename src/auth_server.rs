@@ -128,7 +128,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
         /* .route("/logout", post(logout)) */
         /* .layer(TraceLayer::new_for_http()) */;
 
-    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], auth_server.auth_manager.port));
+    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], auth_server.auth_manager.port));
     let listener = TcpListener::bind(addr).await.unwrap();
     info!("REST endpoint listening on {}", addr);
 
