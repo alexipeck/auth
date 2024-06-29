@@ -26,7 +26,7 @@ use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::info;
 use uuid::Uuid;
 
 pub struct Regexes {
@@ -154,6 +154,7 @@ pub struct AuthManager {
     refresh_in_last_x_seconds: i64,    //60
     max_session_lifetime_seconds: i64, //36000
     max_read_iterations: u32,
+    invite_lifetime_seconds: i64,
 
     uid_authority: Option<Arc<UIDAuthority>>,
 }
@@ -173,6 +174,7 @@ impl AuthManager {
         read_lifetime_seconds: i64,
         write_lifetime_seconds: i64,
         max_session_lifetime_seconds: i64,
+        invite_lifetime_seconds: i64,
     ) -> Result<Self, Error> {
         if allowed_origins.is_empty() {
             return Err(Error::AuthServerBuild(
@@ -234,6 +236,7 @@ impl AuthManager {
             max_read_iterations: (max_session_lifetime_seconds
                 / (read_lifetime_seconds - DEFAULT_REFRESH_IN_LAST_X_SECONDS))
                 as u32,
+            invite_lifetime_seconds,
         })
     }
 }
@@ -503,7 +506,7 @@ impl AuthManager {
         );
         let token_pair = self.create_signed_and_encrypted_token_with_lifetime(
             UserInvite::new(email.to_owned(), user_id),
-            Duration::minutes(600),
+            Duration::minutes(self.invite_lifetime_seconds),
         )?;
         if let Err(err) = save_user(&mut establish_connection(&self.database_url), &user) {
             panic!("{}", err);
@@ -512,9 +515,9 @@ impl AuthManager {
         self.email_to_id_registry
             .write()
             .await
-            .insert(email, user_id);
+            .insert(email.to_owned(), user_id);
         self.smtp_manager.send_email_to_recipient(
-            "alexinicolaspeck@gmail.com".into(),
+            email.into(),
             "Invite Link".into(),
             format!("{}/invite?token={}", &self.cookie_domain, token_pair.token), //https://clouduam.com
         )?;

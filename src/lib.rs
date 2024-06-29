@@ -44,6 +44,7 @@ pub const DEFAULT_READ_LIFETIME_SECONDS: i64 = 900;
 pub const DEFAULT_WRITE_LIFETIME_SECONDS: i64 = 300;
 pub const DEFAULT_REFRESH_IN_LAST_X_SECONDS: i64 = 60;
 pub const DEFAULT_MAX_SESSION_LIFETIME_SECONDS: i64 = 36000;
+pub const DEFAULT_INVITE_LIFETIME_SECONDS: i64 = 600;
 
 pub fn filter_headers_into_btreeset(
     headers: &HeaderMap,

@@ -7,8 +7,8 @@ use crate::{
         login::{init_login_flow_route, login_with_credentials_route},
         setup::{setup_user_account_route, validate_invite_token_route},
     },
-    DEFAULT_MAX_SESSION_LIFETIME_SECONDS, DEFAULT_READ_LIFETIME_SECONDS,
-    DEFAULT_WRITE_LIFETIME_SECONDS,
+    DEFAULT_INVITE_LIFETIME_SECONDS, DEFAULT_MAX_SESSION_LIFETIME_SECONDS,
+    DEFAULT_READ_LIFETIME_SECONDS, DEFAULT_WRITE_LIFETIME_SECONDS,
 };
 use axum::{
     http::{
@@ -163,6 +163,7 @@ pub struct Builder {
     read_lifetime_seconds: i64,
     write_lifetime_seconds: i64,
     max_session_lifetime_seconds: i64,
+    invite_lifetime_seconds: i64,
 }
 
 impl Default for Builder {
@@ -183,6 +184,7 @@ impl Default for Builder {
             read_lifetime_seconds: DEFAULT_READ_LIFETIME_SECONDS,
             write_lifetime_seconds: DEFAULT_WRITE_LIFETIME_SECONDS,
             max_session_lifetime_seconds: DEFAULT_MAX_SESSION_LIFETIME_SECONDS,
+            invite_lifetime_seconds: DEFAULT_INVITE_LIFETIME_SECONDS,
         }
     }
 }
@@ -263,6 +265,11 @@ impl Builder {
         self
     }
 
+    pub fn invite_lifetime_seconds(mut self, lifetime: i64) -> Self {
+        self.invite_lifetime_seconds = lifetime;
+        self
+    }
+
     pub async fn start_server(self) -> Result<Arc<AuthServer>, Error> {
         let mut missing_properties: Vec<RequiredProperties> = Vec::new();
         if self.cookie_name.is_none() {
@@ -312,6 +319,7 @@ impl Builder {
             self.read_lifetime_seconds,
             self.write_lifetime_seconds,
             self.max_session_lifetime_seconds,
+            self.invite_lifetime_seconds,
         )
         .await?;
         let signals = Signals {
