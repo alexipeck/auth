@@ -39,6 +39,8 @@ pub async fn init_login_flow_route(
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
+    #[cfg(feature = "debug-logging")]
+    tracing::debug!("{:?}", headers);
     match init_login_flow(headers, auth_manager) {
         Ok(login_flow) => (StatusCode::OK, Json(login_flow)).into_response(),
         Err(err) => {
@@ -84,6 +86,8 @@ pub async fn login_with_credentials_route(
     headers: HeaderMap,
     axum::response::Json(user_login): axum::response::Json<UserLogin>,
 ) -> impl IntoResponse {
+    #[cfg(feature = "debug-logging")]
+    tracing::debug!("{:?}", headers);
     match login_with_credentials(user_login, headers, auth_manager.to_owned()).await {
         Ok(client_state) => {
             let identity_cookie = match auth_manager
