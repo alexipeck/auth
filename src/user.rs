@@ -130,6 +130,7 @@ pub struct UserSafe {
 
 #[derive(Debug, Serialize)]
 pub struct IdentityCookie {
+    pub name: String,
     pub token: String,
     pub expiry: DateTime<Utc>,
 }

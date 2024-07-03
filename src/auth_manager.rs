@@ -328,7 +328,11 @@ impl AuthManager {
         let token = self
             .setup_flow_with_expiry(&headers, FlowType::Identity, expiry, false, *user_id)?
             .token;
-        Ok(IdentityCookie { token, expiry })
+        Ok(IdentityCookie {
+            name: self.config.cookie_name.to_owned(),
+            token,
+            expiry,
+        })
     }
 
     pub async fn validate_identity(
