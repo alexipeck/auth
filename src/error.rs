@@ -34,6 +34,8 @@ pub enum AuthFlowError {
     Expired,
     #[error("Invalid")]
     Invalid,
+    #[error("IncorrectType")]
+    IncorrectType,
 }
 
 #[derive(Error, Debug)]

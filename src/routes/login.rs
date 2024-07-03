@@ -5,7 +5,6 @@ use crate::{
     flows::user_login::{LoginCredentials, LoginFlow, UserLogin},
     user::ClientState,
     user_session::UserSession,
-    Identity,
 };
 use axum::{
     body::Body,
@@ -19,17 +18,18 @@ use axum_extra::{
     TypedHeader,
 };
 use peck_lib::auth::token_pair::TokenPair;
+use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tracing::{info, warn};
 
-fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result<LoginFlow, Error> {
-    let token_pair: TokenPair = auth_manager.setup_flow_with_lifetime::<Option<bool>>(
-        &headers,
-        FlowType::Login,
-        chrono::Duration::minutes(5),
-        true,
-        None,
-    )?;
+fn init_restricted_flow(
+    headers: HeaderMap,
+    auth_manager: Arc<AuthManager>,
+    lifetime: chrono::Duration,
+    r#type: FlowType,
+) -> Result<LoginFlow, Error> {
+    let token_pair: TokenPair = auth_manager
+        .setup_flow_with_lifetime::<Option<bool>>(&headers, r#type, lifetime, true, None)?;
     Ok(LoginFlow::new(
         token_pair,
         auth_manager
@@ -46,7 +46,33 @@ pub async fn init_login_flow_route(
 ) -> impl IntoResponse {
     #[cfg(feature = "debug-logging")]
     tracing::debug!("{:?}", headers);
-    match init_login_flow(headers, auth_manager) {
+    match init_restricted_flow(
+        headers,
+        auth_manager,
+        chrono::Duration::minutes(5),
+        FlowType::Login,
+    ) {
+        Ok(login_flow) => (StatusCode::OK, Json(login_flow)).into_response(),
+        Err(err) => {
+            warn!("{}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+pub async fn init_identity_login_flow_route(
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    Extension(auth_manager): Extension<Arc<AuthManager>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "debug-logging")]
+    tracing::debug!("{:?}", headers);
+    match init_restricted_flow(
+        headers,
+        auth_manager,
+        chrono::Duration::seconds(10),
+        FlowType::Identity,
+    ) {
         Ok(login_flow) => (StatusCode::OK, Json(login_flow)).into_response(),
         Err(err) => {
             warn!("{}", err);
@@ -87,7 +113,7 @@ async fn login_with_credentials(
     headers: HeaderMap,
     auth_manager: Arc<AuthManager>,
 ) -> Result<ClientState, Error> {
-    auth_manager.verify_flow::<Option<bool>>(&user_login.key, &headers)?;
+    auth_manager.verify_flow::<Option<bool>>(&user_login.key, &headers, &FlowType::Login)?;
     let credentials: LoginCredentials = decrypt_with_private_key::<LoginCredentials>(
         user_login.encrypted_credentials,
         auth_manager.encryption_keys.get_private_decryption_key(),
@@ -168,12 +194,16 @@ pub async fn login_with_credentials_route(
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Identity(String);
+
 pub async fn login_with_identity_route(
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
-    TypedHeader(identity): TypedHeader<Identity>,
+    /* TypedHeader(identity): TypedHeader<Identity>, */
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
+    axum::response::Json(identity): axum::response::Json<Identity>,
 ) -> impl IntoResponse {
     #[cfg(feature = "debug-logging")]
     tracing::debug!("{:?}", headers);

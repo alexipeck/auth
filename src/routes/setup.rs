@@ -104,7 +104,11 @@ async fn setup_user_account(
     auth_manager: Arc<AuthManager>,
 ) -> Result<(), Error> {
     let (user_invite_instance, _): (UserInviteInstance, Option<DateTime<Utc>>) =
-        auth_manager.verify_flow::<UserInviteInstance>(&user_setup.key, headers)?;
+        auth_manager.verify_flow::<UserInviteInstance>(
+            &user_setup.key,
+            headers,
+            &FlowType::Setup,
+        )?;
     let user_setup_incomplete: Option<bool> = auth_manager
         .user_setup_incomplete(user_invite_instance.get_user_id())
         .await;

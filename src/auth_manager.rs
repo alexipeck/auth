@@ -3,9 +3,9 @@ use crate::{
     cryptography::EncryptionKeys,
     database::{establish_connection, get_all_users, save_user, update_user},
     error::{
-        AccountSetupError, AuthServerBuildError, AuthenticationError, Error, IdentityError,
-        LoginError, ReadTokenAsRefreshTokenError, ReadTokenValidationError, StartupError,
-        TokenError, WriteTokenValidationError,
+        AccountSetupError, AuthFlowError, AuthServerBuildError, AuthenticationError, Error,
+        IdentityError, LoginError, ReadTokenAsRefreshTokenError, ReadTokenValidationError,
+        StartupError, TokenError, WriteTokenValidationError,
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
@@ -100,7 +100,7 @@ impl Config {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum FlowType {
     Login,
     Setup,
@@ -342,8 +342,8 @@ impl AuthManager {
         headers: &HeaderMap,
     ) -> Result<(UserProfile, DateTime<Utc>), Error> {
         //TODO: Validate that key and identity headers are the same
-        self.verify_flow::<Option<bool>>(&key, &headers)?;
-        let (user_id, expiry) = self.verify_flow::<Uuid>(identity, headers)?;
+        let _ = self.verify_flow::<Option<bool>>(&key, &headers, &FlowType::Login)?;
+        let (user_id, expiry) = self.verify_flow::<Uuid>(identity, headers, &FlowType::Identity)?;
         let expiry = match expiry {
             Some(expiry) => expiry,
             None => return Err(Error::Identity(IdentityError::MissingExpiry)),
@@ -483,9 +483,13 @@ impl AuthManager {
         &self,
         token: &str,
         headers: &HeaderMap,
+        r#type: &FlowType,
     ) -> Result<(T, Option<DateTime<Utc>>), Error> {
         let (flow, expiry): (Flow<T>, Option<DateTime<Utc>>) =
             self.verify_and_decrypt::<Flow<T>>(token)?;
+        if flow.get_type() != r#type {
+            return Err(Error::AuthFlow(AuthFlowError::IncorrectType));
+        }
         let headers: std::collections::BTreeMap<String, HeaderValue> =
             filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
 
