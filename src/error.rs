@@ -297,6 +297,12 @@ impl From<UIDAuthorityError> for Error {
 }
 
 #[derive(Error, Debug)]
+pub enum IdentityError {
+    #[error("MissingExpiry")]
+    MissingExpiry,
+}
+
+#[derive(Error, Debug)]
 pub enum Error {
     #[error("BearerTokenPairInvalidFormat")]
     BearerTokenPairInvalidFormat,
@@ -334,4 +340,6 @@ pub enum Error {
     Database(DatabaseError),
     #[error("UIDAuthority({0})")]
     UIDAuthority(UIDAuthorityError),
+    #[error("Identity({0})")]
+    Identity(IdentityError),
 }

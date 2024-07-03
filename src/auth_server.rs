@@ -4,7 +4,7 @@ use crate::{
     routes::{
         authenticated::{get_write_token_route, refresh_read_token_route},
         debug_route,
-        login::{init_login_flow_route, login_with_credentials_route},
+        login::{init_login_flow_route, login_with_credentials_route, login_with_identity_route},
         setup::{setup_user_account_route, validate_invite_token_route},
     },
     DEFAULT_INVITE_LIFETIME_SECONDS, DEFAULT_MAX_SESSION_LIFETIME_SECONDS,
@@ -110,6 +110,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
                 .route("/login/init-login-flow", get(init_login_flow_route))
                 .route("/debug", post(debug_route))
                 .route("/login/credentials", post(login_with_credentials_route))
+                .route("/login/identity", post(login_with_identity_route))
                 .route("/setup/init-setup-flow", post(validate_invite_token_route))
                 .route("/setup/credentials", post(setup_user_account_route))
                 .route(

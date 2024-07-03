@@ -3,15 +3,15 @@ use crate::{
     cryptography::EncryptionKeys,
     database::{establish_connection, get_all_users, save_user, update_user},
     error::{
-        AccountSetupError, AuthServerBuildError, AuthenticationError, Error, LoginError,
-        ReadTokenAsRefreshTokenError, ReadTokenValidationError, StartupError, TokenError,
-        WriteTokenValidationError,
+        AccountSetupError, AuthServerBuildError, AuthenticationError, Error, IdentityError,
+        LoginError, ReadTokenAsRefreshTokenError, ReadTokenValidationError, StartupError,
+        TokenError, WriteTokenValidationError,
     },
     filter_headers_into_btreeset,
     flows::user_setup::UserInvite,
     smtp_manager::SmtpManager,
     token::Token,
-    user::{User, UserProfile, UserSafe},
+    user::{IdentityCookie, User, UserProfile, UserSafe},
     user_session::{ReadInternal, TokenMode, UserToken},
     DEFAULT_REFRESH_IN_LAST_X_SECONDS,
 };
@@ -24,7 +24,10 @@ use peck_lib::{
 };
 use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 use tokio::sync::RwLock;
 use tracing::info;
 use uuid::Uuid;
@@ -103,6 +106,7 @@ pub enum FlowType {
     Setup,
     Read,
     Write,
+    Identity,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -247,10 +251,11 @@ impl AuthManager {
         headers: &HeaderMap,
         r#type: FlowType,
         lifetime: Duration,
+        restricted_header_profile: bool,
         data: T,
     ) -> Result<TokenPair, Error> {
         let expiry: DateTime<Utc> = Utc::now() + lifetime;
-        self.setup_flow_with_expiry(headers, r#type, expiry, data)
+        self.setup_flow_with_expiry(headers, r#type, expiry, restricted_header_profile, data)
     }
 
     pub fn setup_flow_with_expiry<T: Serialize + DeserializeOwned>(
@@ -258,10 +263,17 @@ impl AuthManager {
         headers: &HeaderMap,
         r#type: FlowType,
         expiry: DateTime<Utc>,
+        restricted_header_profile: bool,
         data: T,
     ) -> Result<TokenPair, Error> {
-        let headers =
-            filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
+        let headers: BTreeMap<String, HeaderValue> = filter_headers_into_btreeset(
+            headers,
+            if restricted_header_profile {
+                &self.regexes.restricted_header_profile
+            } else {
+                &self.regexes.roaming_header_profile
+            },
+        );
         let key: String = headers.hash_debug();
         let flow: Flow<T> = Flow::new(key, r#type, data);
         self.create_signed_and_encrypted_token_with_expiry(flow, expiry)
@@ -294,14 +306,72 @@ impl AuthManager {
         false
     }
 
-    pub fn generate_read_token(
+    /* fn generate_identity_from_read_token(
+        &self,
+        headers: &HeaderMap,
+        read_token: &str,
+    ) -> Result<IdentityCookie, Error> {
+        let (user_id, read_internal) = self.validate_read_token(read_token, headers)?;
+        let expiry = read_internal.get_latest_expiry().to_owned();
+        let token = self
+            .setup_flow_with_expiry(&headers, FlowType::Identity, expiry, false, user_id)?
+            .token;
+        Ok(IdentityCookie { token, expiry })
+    } */
+
+    pub fn generate_identity(
+        &self,
+        headers: &HeaderMap,
+        user_id: &Uuid,
+        expiry: DateTime<Utc>,
+    ) -> Result<IdentityCookie, Error> {
+        let token = self
+            .setup_flow_with_expiry(&headers, FlowType::Identity, expiry, false, *user_id)?
+            .token;
+        Ok(IdentityCookie { token, expiry })
+    }
+
+    pub async fn validate_identity(
+        &self,
+        identity: &str,
+        key: &str,
+        headers: &HeaderMap,
+    ) -> Result<(UserProfile, DateTime<Utc>), Error> {
+        //TODO: Validate that key and identity headers are the same
+        self.verify_flow::<Option<bool>>(&key, &headers)?;
+        let (user_id, expiry) = self.verify_flow::<Uuid>(identity, headers)?;
+        let expiry = match expiry {
+            Some(expiry) => expiry,
+            None => return Err(Error::Identity(IdentityError::MissingExpiry)),
+        };
+        let user_profile = match self.users.read().await.get(&user_id) {
+            Some(user) => {
+                if user.incomplete() {
+                    return Err(Error::Authentication(
+                        AuthenticationError::AccountSetupIncomplete,
+                    ));
+                }
+                user.to_user_profile()
+            }
+            None => {
+                return Err(Error::Authentication(AuthenticationError::UserNotFound(
+                    user_id,
+                )))
+            }
+        };
+        Ok((user_profile, expiry))
+    }
+
+    pub fn generate_aligned_read_token(
         &self,
         headers: &HeaderMap,
         session_id: Uuid,
         user_id: Uuid,
+        expiry: DateTime<Utc>,
     ) -> Result<TokenPair, Error> {
-        let headers = filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
-        self.create_signed_and_encrypted_token_with_lifetime(
+        let headers: BTreeMap<String, HeaderValue> =
+            filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
+        self.create_signed_and_encrypted_token_with_expiry(
             UserToken::new(
                 TokenMode::Read(Box::new(ReadInternal::new(
                     headers.hash_debug(),
@@ -311,7 +381,7 @@ impl AuthManager {
                 ))),
                 user_id,
             ),
-            Duration::seconds(self.read_lifetime_seconds),
+            expiry,
         )
     }
 
@@ -320,14 +390,16 @@ impl AuthManager {
         headers: &HeaderMap,
         session_id: Uuid,
         user_id: Uuid,
-    ) -> Result<(TokenPair, TokenPair), Error> {
-        let headers = filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
+    ) -> Result<(TokenPair, TokenPair, DateTime<Utc>), Error> {
+        let headers: BTreeMap<String, HeaderValue> =
+            filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
         let read_internal: ReadInternal = ReadInternal::new(
             headers.hash_debug(),
             session_id,
             Duration::seconds(self.max_session_lifetime_seconds),
             self.max_read_iterations,
         );
+        let latest_expiry: DateTime<Utc> = read_internal.get_latest_expiry().to_owned();
         let write_internal: crate::user_session::WriteInternal =
             read_internal.generate_write_internal();
         let read_token: TokenPair = self.create_signed_and_encrypted_token_with_lifetime(
@@ -338,7 +410,7 @@ impl AuthManager {
             UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
             Duration::seconds(self.write_lifetime_seconds),
         )?;
-        Ok((read_token, write_token))
+        Ok((read_token, write_token, latest_expiry))
     }
 
     pub fn refresh_read_token(&self, token: &str, headers: &HeaderMap) -> Result<TokenPair, Error> {
@@ -360,7 +432,8 @@ impl AuthManager {
         }
         let (user_id, mut token_mode) = user_token.extract();
         let expiry: DateTime<Utc>;
-        let headers = filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
+        let headers: BTreeMap<String, HeaderValue> =
+            filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
         if let TokenMode::Read(read_mode) = &mut token_mode {
             expiry = read_mode.upgrade(&headers.hash_debug(), self.read_lifetime_seconds)?;
         } else {

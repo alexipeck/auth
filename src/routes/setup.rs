@@ -51,6 +51,7 @@ async fn validate_invite_token(
             headers,
             FlowType::Setup,
             expiry,
+            true,
             user_invite_instance,
         )?;
     } else {
@@ -58,6 +59,7 @@ async fn validate_invite_token(
             headers,
             FlowType::Setup,
             Duration::minutes(5),
+            true,
             user_invite_instance,
         )?;
     };

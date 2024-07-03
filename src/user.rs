@@ -1,14 +1,14 @@
-use email_address::EmailAddress;
-use google_authenticator::GoogleAuthenticator;
-use serde::Serialize;
-use uuid::Uuid;
-
 use crate::{
     cryptography::generate_token,
     error::{AccountSetupError, AuthenticationError, Error},
     model::UserModel,
     user_session::UserSession,
 };
+use chrono::{DateTime, Utc};
+use email_address::EmailAddress;
+use google_authenticator::GoogleAuthenticator;
+use serde::Serialize;
+use uuid::Uuid;
 
 #[derive(Serialize, Debug, Clone)]
 pub struct User {
@@ -129,6 +129,12 @@ pub struct UserSafe {
 }
 
 #[derive(Debug, Serialize)]
+pub struct IdentityCookie {
+    pub token: String,
+    pub expiry: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct UserProfile {
     pub display_name: String,
     pub email: EmailAddress,
@@ -139,4 +145,5 @@ pub struct UserProfile {
 pub struct ClientState {
     pub user_session: UserSession,
     pub user_profile: UserProfile,
+    pub identity: IdentityCookie,
 }

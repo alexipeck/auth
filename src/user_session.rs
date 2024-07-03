@@ -16,22 +16,40 @@ use uuid::Uuid;
 #[derive(Debug, Serialize /* Deserialize */)]
 pub struct UserSession {
     read: TokenPair,
-    write: TokenPair,
+    write: Option<TokenPair>,
     session_id: Uuid,
 }
 
 impl UserSession {
-    pub async fn create_from_user_id(
+    pub async fn create_read_write_from_user_id(
         user_id: Uuid,
-        headers: HeaderMap,
+        headers: &HeaderMap,
         auth_manager: Arc<AuthManager>,
+    ) -> Result<(Self, DateTime<Utc>), Error> {
+        let session_id = auth_manager.generate_session_id().await;
+        let (read, write, latest_expiry): (TokenPair, TokenPair, DateTime<Utc>) =
+            auth_manager.generate_read_and_write_token(headers, session_id, user_id)?;
+        Ok((
+            Self {
+                read,
+                write: Some(write),
+                session_id,
+            },
+            latest_expiry,
+        ))
+    }
+    pub async fn create_aligned_read_from_user_id(
+        user_id: Uuid,
+        headers: &HeaderMap,
+        auth_manager: Arc<AuthManager>,
+        expiry: DateTime<Utc>,
     ) -> Result<Self, Error> {
         let session_id = auth_manager.generate_session_id().await;
-        let (read, write): (TokenPair, TokenPair) =
-            auth_manager.generate_read_and_write_token(&headers, session_id, user_id)?;
+        let read: TokenPair =
+            auth_manager.generate_aligned_read_token(headers, session_id, user_id, expiry)?;
         Ok(Self {
             read,
-            write,
+            write: None,
             session_id,
         })
     }
@@ -87,6 +105,9 @@ impl ReadInternal {
     }
     pub fn get_session_id(&self) -> &Uuid {
         &self.session_id
+    }
+    pub fn get_latest_expiry(&self) -> &DateTime<Utc> {
+        &self.latest_expiry
     }
     pub fn generate_write_internal(&self) -> WriteInternal {
         WriteInternal {

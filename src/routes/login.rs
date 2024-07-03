@@ -5,17 +5,21 @@ use crate::{
     flows::user_login::{LoginCredentials, LoginFlow, UserLogin},
     user::ClientState,
     user_session::UserSession,
+    Identity,
 };
 use axum::{
     body::Body,
     extract::ConnectInfo,
-    http::{header::SET_COOKIE, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Extension, Json,
 };
-use cookie::{time::Duration, CookieBuilder, SameSite};
+use axum_extra::{
+    headers::{authorization::Bearer, Authorization},
+    TypedHeader,
+};
 use peck_lib::auth::token_pair::TokenPair;
-use std::{net::SocketAddr, sync::Arc, time::SystemTime};
+use std::{net::SocketAddr, sync::Arc};
 use tracing::{info, warn};
 
 fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result<LoginFlow, Error> {
@@ -23,6 +27,7 @@ fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result
         &headers,
         FlowType::Login,
         chrono::Duration::minutes(5),
+        true,
         None,
     )?;
     Ok(LoginFlow::new(
@@ -50,6 +55,34 @@ pub async fn init_login_flow_route(
     }
 }
 
+async fn login_with_identity(
+    identity: &str,
+    key: &str,
+    headers: HeaderMap,
+    auth_manager: Arc<AuthManager>,
+) -> Result<ClientState, Error> {
+    let (user_profile, expiry) = auth_manager
+        .validate_identity(identity, key, &headers)
+        .await?;
+    let user_session = UserSession::create_aligned_read_from_user_id(
+        user_profile.user_id,
+        &headers,
+        auth_manager.to_owned(),
+        expiry,
+    )
+    .await?;
+    info!(
+        "User authenticated from identity (read-only): ({}, {}, {})",
+        user_profile.display_name, user_profile.email, user_profile.user_id
+    );
+    let identity = auth_manager.generate_identity(&headers, &user_profile.user_id, expiry)?;
+    Ok(ClientState {
+        user_session,
+        user_profile,
+        identity,
+    })
+}
+
 async fn login_with_credentials(
     user_login: UserLogin,
     headers: HeaderMap,
@@ -67,16 +100,22 @@ async fn login_with_credentials(
             &credentials.two_fa_code,
         )
         .await?;
-    let user_session =
-        UserSession::create_from_user_id(user_profile.user_id, headers, auth_manager.to_owned())
-            .await?;
+    let (user_session, latest_expiry) = UserSession::create_read_write_from_user_id(
+        user_profile.user_id,
+        &headers,
+        auth_manager.to_owned(),
+    )
+    .await?;
     info!(
         "User authenticated: ({}, {}, {})",
         user_profile.display_name, user_profile.email, user_profile.user_id
     );
+    let identity =
+        auth_manager.generate_identity(&headers, &user_profile.user_id, latest_expiry)?;
     Ok(ClientState {
         user_session,
         user_profile,
+        identity,
     })
 }
 
@@ -90,30 +129,18 @@ pub async fn login_with_credentials_route(
     tracing::debug!("{:?}", headers);
     match login_with_credentials(user_login, headers, auth_manager.to_owned()).await {
         Ok(client_state) => {
-            let identity_cookie = match auth_manager
-                .create_signed_and_encrypted_token(client_state.user_profile.user_id)
-            {
-                Ok(identity_cookie) => identity_cookie,
-                Err(err) => {
-                    warn!("{err}");
-                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-                }
-            };
-            let lifetime: Duration = Duration::new(172800, 0);
-            let cookie = CookieBuilder::new(auth_manager.config.get_cookie_name(), identity_cookie)
-                .path("/")
-                .http_only(true) //Set to true for production
-                .secure(true) //Set to true for production
-                .domain(&auth_manager.cookie_domain)
-                .same_site(SameSite::Lax)
-                .max_age(lifetime)
-                .expires(Some((SystemTime::now() + lifetime).into()))
-                .build();
-            #[cfg(feature = "debug-logging")]
-            tracing::debug!("{:?}", cookie);
+            /* let cookie = CookieBuilder::new(auth_manager.config.get_cookie_name(), identity_cookie)
+            .path("/")
+            .http_only(true) //Set to true for production
+            .secure(true) //Set to true for production
+            .domain(&auth_manager.cookie_domain)
+            .same_site(SameSite::Lax)
+            .max_age(lifetime)
+            .expires(Some((SystemTime::now() + lifetime).into()))
+            .build(); */
             match Response::builder()
                 .status(StatusCode::OK)
-                .header(SET_COOKIE, cookie.to_string())
+                /* .header(SET_COOKIE, cookie.to_string()) */
                 .body(Body::from(match serde_json::to_string(&client_state) {
                     Ok(t) => t,
                     Err(err) => {
@@ -128,6 +155,62 @@ pub async fn login_with_credentials_route(
                 }
             }
             /* (StatusCode::OK, Json(client_state)).into_response() */
+        }
+        Err(err) => {
+            warn!("{}", err);
+            match err {
+                Error::Authentication(
+                    AuthenticationError::IncorrectCredentials
+                    | AuthenticationError::Incorrect2FACode,
+                ) => StatusCode::UNAUTHORIZED.into_response(),
+                _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            }
+        }
+    }
+}
+
+pub async fn login_with_identity_route(
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
+    TypedHeader(identity): TypedHeader<Identity>,
+    Extension(auth_manager): Extension<Arc<AuthManager>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "debug-logging")]
+    tracing::debug!("{:?}", headers);
+    match login_with_identity(
+        &identity.0,
+        authorisation.token(),
+        headers,
+        auth_manager.to_owned(),
+    )
+    .await
+    {
+        Ok(client_state) => {
+            /* let cookie = CookieBuilder::new(auth_manager.config.get_cookie_name(), identity_cookie)
+            .path("/")
+            .http_only(true) //Set to true for production
+            .secure(true) //Set to true for production
+            .domain(&auth_manager.cookie_domain)
+            .same_site(SameSite::Lax)
+            .max_age(lifetime)
+            .expires(Some((SystemTime::now() + lifetime).into()))
+            .build(); */
+            match Response::builder().status(StatusCode::OK).body(Body::from(
+                match serde_json::to_string(&client_state) {
+                    Ok(t) => t,
+                    Err(err) => {
+                        warn!("{err}");
+                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    }
+                },
+            )) {
+                Ok(response) => response,
+                Err(err) => {
+                    warn!("{err}");
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
         }
         Err(err) => {
             warn!("{}", err);

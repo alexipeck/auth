@@ -1,4 +1,5 @@
-use axum::http::{HeaderMap, HeaderValue};
+use axum::http::{HeaderMap, HeaderName, HeaderValue};
+use axum_extra::headers::{self, Header};
 use regex::RegexSet;
 use std::collections::BTreeMap;
 
@@ -67,4 +68,34 @@ pub fn str_to_two_fa(input: &str) -> Option<[u8; 6]> {
     let mut array = [0u8; 6];
     array.copy_from_slice(bytes);
     Some(array)
+}
+
+#[derive(Debug, Clone)]
+pub struct Identity(pub String);
+
+impl Header for Identity {
+    fn name() -> &'static HeaderName {
+        static NAME: HeaderName = HeaderName::from_static("identity");
+        &NAME
+    }
+
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        if let Some(value) = values.next() {
+            let value = value.to_str().map_err(|_| headers::Error::invalid())?;
+            Ok(Identity(value.to_string()))
+        } else {
+            Err(headers::Error::invalid())
+        }
+    }
+
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
+        let value: HeaderValue = self.0.clone().try_into().unwrap();
+        values.extend(std::iter::once(value));
+    }
 }
