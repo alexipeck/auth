@@ -146,5 +146,5 @@ pub struct UserProfile {
 pub struct ClientState {
     pub user_session: UserSession,
     pub user_profile: UserProfile,
-    pub identity: IdentityCookie,
+    pub identity: Option<IdentityCookie>,
 }

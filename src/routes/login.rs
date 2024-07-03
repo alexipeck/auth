@@ -75,11 +75,10 @@ async fn login_with_identity(
         "User authenticated from identity (read-only): ({}, {}, {})",
         user_profile.display_name, user_profile.email, user_profile.user_id
     );
-    let identity = auth_manager.generate_identity(&headers, &user_profile.user_id, expiry)?;
     Ok(ClientState {
         user_session,
         user_profile,
-        identity,
+        identity: None,
     })
 }
 
@@ -115,7 +114,7 @@ async fn login_with_credentials(
     Ok(ClientState {
         user_session,
         user_profile,
-        identity,
+        identity: Some(identity),
     })
 }
 
