@@ -102,13 +102,15 @@ pub async fn login_with_credentials_route(
             let lifetime: Duration = Duration::new(172800, 0);
             let cookie = CookieBuilder::new(auth_manager.config.get_cookie_name(), identity_cookie)
                 .path("/")
-                .http_only(false) //Set to true for production
-                .secure(false) //Set to true for production
+                .http_only(true) //Set to true for production
+                .secure(true) //Set to true for production
                 .domain(&auth_manager.cookie_domain)
                 .same_site(SameSite::Lax)
                 .max_age(lifetime)
                 .expires(Some((SystemTime::now() + lifetime).into()))
                 .build();
+            #[cfg(feature = "debug-logging")]
+            tracing::debug!("{:?}", cookie);
             match Response::builder()
                 .status(StatusCode::OK)
                 .header(SET_COOKIE, cookie.to_string())
