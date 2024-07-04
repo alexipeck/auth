@@ -346,7 +346,7 @@ impl AuthManager {
             Ok(_) => {}
             Err(err) => {
                 warn!("{err}");
-                return err;
+                return Err(err);
             }
         };
         let (user_id, expiry) =
@@ -354,7 +354,7 @@ impl AuthManager {
                 Ok(t) => t,
                 Err(err) => {
                     warn!("{err}");
-                    return err;
+                    return Err(err);
                 }
             };
         let expiry = match expiry {
