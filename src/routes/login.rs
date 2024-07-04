@@ -1,7 +1,7 @@
 use crate::{
     auth_manager::{AuthManager, FlowType},
     cryptography::decrypt_with_private_key,
-    error::{AuthenticationError, Error},
+    error::{AuthenticationError, Error, TokenError},
     flows::user_login::{LoginCredentials, LoginFlow, UserLogin},
     user::ClientState,
     user_session::UserSession,
@@ -248,7 +248,7 @@ pub async fn login_with_identity_route(
                     AuthenticationError::IncorrectCredentials
                     | AuthenticationError::Incorrect2FACode,
                 ) => StatusCode::UNAUTHORIZED.into_response(),
-                _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                _ => StatusCode::BAD_REQUEST.into_response(),
             }
         }
     }
