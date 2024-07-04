@@ -29,7 +29,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 pub struct Regexes {
@@ -342,8 +342,21 @@ impl AuthManager {
         headers: &HeaderMap,
     ) -> Result<(UserProfile, DateTime<Utc>), Error> {
         //TODO: Validate that key and identity headers are the same
-        let _ = self.verify_flow::<Option<bool>>(&key, &headers, &FlowType::Login)?;
-        let (user_id, expiry) = self.verify_flow::<Uuid>(identity, headers, &FlowType::Identity)?;
+        let _ = match self.verify_flow::<Option<bool>>(&key, &headers, &FlowType::Login) {
+            Ok(_) => {}
+            Err(err) => {
+                warn!("{err}");
+                return err;
+            }
+        };
+        let (user_id, expiry) =
+            match self.verify_flow::<Uuid>(identity, headers, &FlowType::Identity) {
+                Ok(t) => t,
+                Err(err) => {
+                    warn!("{err}");
+                    return err;
+                }
+            };
         let expiry = match expiry {
             Some(expiry) => expiry,
             None => return Err(Error::Identity(IdentityError::MissingExpiry)),
