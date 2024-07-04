@@ -490,7 +490,7 @@ impl AuthManager {
         if flow.get_type() != r#type {
             #[cfg(feature = "debug-logging")]
             debug!(
-                "Flow is of type {} but is expecting {}.",
+                "Flow is of type {:?} but is expecting {:?}.",
                 flow.get_type(),
                 r#type
             );
