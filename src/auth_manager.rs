@@ -29,7 +29,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 pub struct Regexes {
@@ -488,6 +488,12 @@ impl AuthManager {
         let (flow, expiry): (Flow<T>, Option<DateTime<Utc>>) =
             self.verify_and_decrypt::<Flow<T>>(token)?;
         if flow.get_type() != r#type {
+            #[cfg(feature = "debug-logging")]
+            debug!(
+                "Flow is of type {} but is expecting {}.",
+                flow.get_type(),
+                r#type
+            );
             return Err(Error::AuthFlow(AuthFlowError::IncorrectType));
         }
         let headers: std::collections::BTreeMap<String, HeaderValue> =
