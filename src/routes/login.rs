@@ -71,7 +71,7 @@ pub async fn init_identity_login_flow_route(
         headers,
         auth_manager,
         chrono::Duration::seconds(10),
-        FlowType::Identity,
+        FlowType::Login,
     ) {
         Ok(login_flow) => (StatusCode::OK, Json(login_flow)).into_response(),
         Err(err) => {
