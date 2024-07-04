@@ -108,6 +108,7 @@ async fn setup_user_account(
             &user_setup.key,
             headers,
             &FlowType::Setup,
+            true,
         )?;
     let user_setup_incomplete: Option<bool> = auth_manager
         .user_setup_incomplete(user_invite_instance.get_user_id())

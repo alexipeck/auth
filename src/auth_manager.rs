@@ -325,6 +325,8 @@ impl AuthManager {
         user_id: &Uuid,
         expiry: DateTime<Utc>,
     ) -> Result<IdentityCookie, Error> {
+        #[cfg(feature = "debug-logging")]
+        debug!("Headers for generating identity {:?}", headers);
         let token = self
             .setup_flow_with_expiry(&headers, FlowType::Identity, expiry, false, *user_id)?
             .token;
@@ -342,7 +344,9 @@ impl AuthManager {
         headers: &HeaderMap,
     ) -> Result<(UserProfile, DateTime<Utc>), Error> {
         //TODO: Validate that key and identity headers are the same
-        let _ = match self.verify_flow::<Option<bool>>(&key, &headers, &FlowType::Login) {
+        #[cfg(feature = "debug-logging")]
+        debug!("Headers for validating identity {:?}", headers);
+        let _ = match self.verify_flow::<Option<bool>>(&key, &headers, &FlowType::Login, true) {
             Ok(_) => {}
             Err(err) => {
                 warn!("{err}");
@@ -350,7 +354,7 @@ impl AuthManager {
             }
         };
         let (user_id, expiry) =
-            match self.verify_flow::<Uuid>(identity, headers, &FlowType::Identity) {
+            match self.verify_flow::<Uuid>(identity, headers, &FlowType::Identity, false) {
                 Ok(t) => t,
                 Err(err) => {
                     warn!("{err}");
@@ -497,6 +501,7 @@ impl AuthManager {
         token: &str,
         headers: &HeaderMap,
         r#type: &FlowType,
+        restricted_header_profile: bool,
     ) -> Result<(T, Option<DateTime<Utc>>), Error> {
         let (flow, expiry): (Flow<T>, Option<DateTime<Utc>>) =
             self.verify_and_decrypt::<Flow<T>>(token)?;
@@ -509,8 +514,14 @@ impl AuthManager {
             );
             return Err(Error::AuthFlow(AuthFlowError::IncorrectType));
         }
-        let headers: std::collections::BTreeMap<String, HeaderValue> =
-            filter_headers_into_btreeset(headers, &self.regexes.restricted_header_profile);
+        let headers: std::collections::BTreeMap<String, HeaderValue> = filter_headers_into_btreeset(
+            headers,
+            if restricted_header_profile {
+                &self.regexes.restricted_header_profile
+            } else {
+                &self.regexes.roaming_header_profile
+            },
+        );
 
         let key: String = headers.hash_debug();
         if &key != flow.get_header_key() {

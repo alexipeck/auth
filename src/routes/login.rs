@@ -113,7 +113,7 @@ async fn login_with_credentials(
     headers: HeaderMap,
     auth_manager: Arc<AuthManager>,
 ) -> Result<ClientState, Error> {
-    auth_manager.verify_flow::<Option<bool>>(&user_login.key, &headers, &FlowType::Login)?;
+    auth_manager.verify_flow::<Option<bool>>(&user_login.key, &headers, &FlowType::Login, true)?;
     let credentials: LoginCredentials = decrypt_with_private_key::<LoginCredentials>(
         user_login.encrypted_credentials,
         auth_manager.encryption_keys.get_private_decryption_key(),
