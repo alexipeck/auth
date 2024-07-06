@@ -19,6 +19,7 @@ pub struct User {
     hashed_and_salted_password: String,
     #[serde(skip)]
     two_fa_client_secret: String,
+    disabled: bool,
 }
 
 impl User {
@@ -28,6 +29,7 @@ impl User {
         email: EmailAddress,
         hashed_and_salted_password: String,
         two_fa_client_secret: String,
+        disabled: bool,
     ) -> Self {
         Self {
             id,
@@ -35,6 +37,7 @@ impl User {
             email,
             hashed_and_salted_password,
             two_fa_client_secret,
+            disabled,
         }
     }
     pub fn to_model(&self) -> UserModel {
@@ -44,6 +47,7 @@ impl User {
             self.email.to_string(),
             self.hashed_and_salted_password.to_owned(),
             self.two_fa_client_secret.to_owned(),
+            self.disabled,
         )
     }
     pub fn to_safe(&self) -> UserSafe {
@@ -57,6 +61,9 @@ impl User {
         self.display_name.is_empty()
             || self.hashed_and_salted_password.is_empty()
             || self.two_fa_client_secret.is_empty()
+    }
+    pub fn disabled(&self) -> bool {
+        self.disabled
     }
     pub fn to_user_profile(&self) -> UserProfile {
         UserProfile {
@@ -89,6 +96,7 @@ impl User {
         self.hashed_and_salted_password = hashed_and_salted_password;
         self.two_fa_client_secret = two_fa_client_secret;
         self.display_name = display_name;
+        self.disabled = false;
         Ok(())
     }
     pub fn get_id(&self) -> &Uuid {

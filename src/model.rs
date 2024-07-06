@@ -19,6 +19,7 @@ pub struct UserModel {
     email: String,
     hashed_and_salted_password: String,
     two_fa_client_secret: String,
+    disabled: bool,
 }
 
 impl UserModel {
@@ -28,6 +29,7 @@ impl UserModel {
         email: String,
         hashed_and_salted_password: String,
         two_fa_client_secret: String,
+        disabled: bool,
     ) -> Self {
         Self {
             id,
@@ -35,6 +37,7 @@ impl UserModel {
             email,
             hashed_and_salted_password,
             two_fa_client_secret,
+            disabled,
         }
     }
     pub fn to_user(self) -> Result<User, Error> {
@@ -60,6 +63,7 @@ impl UserModel {
             email_address,
             self.hashed_and_salted_password,
             self.two_fa_client_secret,
+            self.disabled,
         ))
     }
 }

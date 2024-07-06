@@ -60,10 +60,12 @@ pub enum AuthenticationError {
     SerialisingLoginCredentials(SerdeError),
     #[error("EncryptLoginCredentials({0})")]
     EncryptLoginCredentials(RSAError),
+    #[error("Disabled")]
+    Disabled,
     /* #[error("")]
     ErrorGetting2FACodeFromSecret,
-    #[error("Argon2ValidationError({0})")]
-    Argon2ValidationError(String),
+    #[error("Argon2Validation({0})")]
+    Argon2Validation(String),
     #[error("")]
     Invalid2FASecret,
     #[error("")]

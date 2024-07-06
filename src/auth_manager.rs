@@ -29,7 +29,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 pub struct Regexes {
@@ -306,19 +306,6 @@ impl AuthManager {
         false
     }
 
-    /* fn generate_identity_from_read_token(
-        &self,
-        headers: &HeaderMap,
-        read_token: &str,
-    ) -> Result<IdentityCookie, Error> {
-        let (user_id, read_internal) = self.validate_read_token(read_token, headers)?;
-        let expiry = read_internal.get_latest_expiry().to_owned();
-        let token = self
-            .setup_flow_with_expiry(&headers, FlowType::Identity, expiry, false, user_id)?
-            .token;
-        Ok(IdentityCookie { token, expiry })
-    } */
-
     pub fn generate_identity(
         &self,
         headers: &HeaderMap,
@@ -371,6 +358,9 @@ impl AuthManager {
                     return Err(Error::Authentication(
                         AuthenticationError::AccountSetupIncomplete,
                     ));
+                }
+                if user.disabled() {
+                    return Err(Error::Authentication(AuthenticationError::Disabled));
                 }
                 user.to_user_profile()
             }
@@ -614,6 +604,7 @@ impl AuthManager {
             email.to_owned(),
             String::new(),
             String::new(),
+            true,
         );
         let token_pair = self.create_signed_and_encrypted_token_with_lifetime(
             UserInvite::new(email.to_owned(), user_id),
@@ -736,6 +727,9 @@ impl AuthManager {
                         return Err(Error::Authentication(
                             AuthenticationError::AccountSetupIncomplete,
                         ));
+                    }
+                    if user.disabled() {
+                        return Err(Error::Authentication(AuthenticationError::Disabled));
                     }
                     match argon2::verify_encoded(
                         user.get_hashed_and_salted_password(),

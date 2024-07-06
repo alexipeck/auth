@@ -7,5 +7,6 @@ diesel::table! {
         email -> Text,
         hashed_and_salted_password -> Text,
         two_fa_client_secret -> Text,
+        disabled -> Bool,
     }
 }

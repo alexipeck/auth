@@ -1,7 +1,7 @@
 use crate::{
     auth_manager::{AuthManager, FlowType},
     cryptography::decrypt_with_private_key,
-    error::{AuthenticationError, Error, TokenError},
+    error::{AuthenticationError, Error},
     flows::user_login::{LoginCredentials, LoginFlow, UserLogin},
     user::ClientState,
     user_session::UserSession,
