@@ -81,7 +81,7 @@ pub async fn validate_invite_token_route(
     axum::response::Json(invite_token): axum::response::Json<InviteToken>,
 ) -> impl IntoResponse {
     #[cfg(feature = "debug-logging")]
-    tracing::debug!("{:?}", headers);
+    tracing::tracing::debug!("{:?}", headers);
     match validate_invite_token(&invite_token.token, &headers, auth_manager).await {
         Ok(user_setup_flow) => (StatusCode::OK, Json(user_setup_flow)).into_response(),
         Err(err) => {
@@ -165,7 +165,7 @@ pub async fn setup_user_account_route(
     axum::response::Json(user_setup): axum::response::Json<UserSetup>,
 ) -> impl IntoResponse {
     #[cfg(feature = "debug-logging")]
-    tracing::debug!("{:?}", headers);
+    tracing::tracing::debug!("{:?}", headers);
     match setup_user_account(user_setup, &headers, auth_manager).await {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => match err {

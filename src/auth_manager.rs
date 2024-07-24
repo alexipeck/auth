@@ -313,7 +313,7 @@ impl AuthManager {
         expiry: DateTime<Utc>,
     ) -> Result<IdentityCookie, Error> {
         #[cfg(feature = "debug-logging")]
-        debug!("Headers for generating identity {:?}", headers);
+        tracing::debug!("Headers for generating identity {:?}", headers);
         let token = self
             .setup_flow_with_expiry(&headers, FlowType::Identity, expiry, false, *user_id)?
             .token;
@@ -332,7 +332,7 @@ impl AuthManager {
     ) -> Result<(UserProfile, DateTime<Utc>), Error> {
         //TODO: Validate that key and identity headers are the same
         #[cfg(feature = "debug-logging")]
-        debug!("Headers for validating identity {:?}", headers);
+        tracing::debug!("Headers for validating identity {:?}", headers);
         let _ = match self.verify_flow::<Option<bool>>(&key, &headers, &FlowType::Login, true) {
             Ok(_) => {}
             Err(err) => {
@@ -497,7 +497,7 @@ impl AuthManager {
             self.verify_and_decrypt::<Flow<T>>(token)?;
         if flow.get_type() != r#type {
             #[cfg(feature = "debug-logging")]
-            debug!(
+            tracing::debug!(
                 "Flow is of type {:?} but is expecting {:?}.",
                 flow.get_type(),
                 r#type
@@ -660,7 +660,7 @@ impl AuthManager {
         headers: &HeaderMap,
     ) -> Result<(Uuid, ReadInternal), Error> {
         #[cfg(feature = "debug-logging")]
-        debug!("Headers for validating read token {:?}", headers);
+        tracing::debug!("Headers for validating read token {:?}", headers);
         let (user_token, _) = self.verify_and_decrypt::<UserToken>(token)?;
         let (user_id, token_mode) = user_token.extract();
         if let TokenMode::Read(read_mode) = token_mode {
@@ -681,7 +681,7 @@ impl AuthManager {
 
     pub fn validate_write_token(&self, token: &str, headers: &HeaderMap) -> Result<Uuid, Error> {
         #[cfg(feature = "debug-logging")]
-        debug!("Headers for validating write token {:?}", headers);
+        tracing::debug!("Headers for validating write token {:?}", headers);
         let (read_token, write_token) = {
             let t: Vec<&str> = token.split(':').collect::<Vec<&str>>();
             if t.len() != 2 {

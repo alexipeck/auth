@@ -135,7 +135,7 @@ impl ReadInternal {
             let proposed_expiry: DateTime<Utc> =
                 Utc::now() + Duration::seconds(read_lifetime_seconds);
             if proposed_expiry > self.latest_expiry {
-                debug!("Read token expiry truncated to latest_expiry");
+                tracing::debug!("Read token expiry truncated to latest_expiry");
                 self.latest_expiry
             } else {
                 proposed_expiry
