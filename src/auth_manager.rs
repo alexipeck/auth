@@ -44,17 +44,17 @@ impl Default for Regexes {
             "user-agent",
             /* "x-forwarded-host", */
             "x-forwarded-proto",
-            "x-forwarded-port",
+            /* "x-forwarded-port", */
             /* "origin", */
-            "sec-ch-ua",
-            "sec-ch-ua-mobile",
-            "sec-ch-ua-platform",
-            "sec-fetch-dest",
-            "sec-fetch-site",
-            "sec-fetch-mode",
+            /* "sec-ch-ua", */
+            /* "sec-ch-ua-mobile", */
+            /* "sec-ch-ua-platform", */
+            /* "sec-fetch-dest", */
+            /* "sec-fetch-site", */
+            /* "sec-fetch-mode", */
             "accept-language",
-            "dnt",
-            "connection",
+            /* "dnt", */
+            /* "connection", */
             "accept-encoding",
         ];
         let roaming_header_profile = RegexSet::new(
