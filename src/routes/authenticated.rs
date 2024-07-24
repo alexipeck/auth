@@ -23,7 +23,7 @@ pub async fn refresh_read_token_route(
     TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
 ) -> impl IntoResponse {
     #[cfg(feature = "debug-logging")]
-    tracing::tracing::debug!("{:?}", headers);
+    tracing::debug!("{:?}", headers);
     match auth_manager.refresh_read_token(authorisation.token(), &headers) {
         Ok(token_pair) => (StatusCode::OK, Json(token_pair)).into_response(),
         Err(err) => {
@@ -47,7 +47,7 @@ pub async fn get_write_token_route(
     axum::response::Json(data): axum::response::Json<GetWriteTokenData>,
 ) -> impl IntoResponse {
     #[cfg(feature = "debug-logging")]
-    tracing::tracing::debug!("{:?}", headers);
+    tracing::debug!("{:?}", headers);
     match auth_manager
         .generate_write_token(authorisation.token(), &data.two_fa_code, &headers)
         .await

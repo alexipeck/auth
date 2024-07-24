@@ -45,7 +45,7 @@ pub async fn init_login_flow_route(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     #[cfg(feature = "debug-logging")]
-    tracing::tracing::debug!("{:?}", headers);
+    tracing::debug!("{:?}", headers);
     match init_restricted_flow(
         headers,
         auth_manager,
@@ -66,7 +66,7 @@ pub async fn init_identity_login_flow_route(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     #[cfg(feature = "debug-logging")]
-    tracing::tracing::debug!("{:?}", headers);
+    tracing::debug!("{:?}", headers);
     match init_restricted_flow(
         headers,
         auth_manager,
@@ -151,7 +151,7 @@ pub async fn login_with_credentials_route(
     axum::response::Json(user_login): axum::response::Json<UserLogin>,
 ) -> impl IntoResponse {
     #[cfg(feature = "debug-logging")]
-    tracing::tracing::debug!("{:?}", headers);
+    tracing::debug!("{:?}", headers);
     match login_with_credentials(user_login, headers, auth_manager.to_owned()).await {
         Ok(client_state) => {
             /* let cookie = CookieBuilder::new(auth_manager.config.get_cookie_name(), identity_cookie)
@@ -206,7 +206,7 @@ pub async fn login_with_identity_route(
     axum::response::Json(identity): axum::response::Json<Identity>,
 ) -> impl IntoResponse {
     #[cfg(feature = "debug-logging")]
-    tracing::tracing::debug!("{:?}", headers);
+    tracing::debug!("{:?}", headers);
     match login_with_identity(
         &identity.0,
         authorisation.token(),
