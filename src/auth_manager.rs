@@ -659,6 +659,8 @@ impl AuthManager {
         token: &str,
         headers: &HeaderMap,
     ) -> Result<(Uuid, ReadInternal), Error> {
+        #[cfg(feature = "debug-logging")]
+        debug!("Headers for validating read token {:?}", headers);
         let (user_token, _) = self.verify_and_decrypt::<UserToken>(token)?;
         let (user_id, token_mode) = user_token.extract();
         if let TokenMode::Read(read_mode) = token_mode {
@@ -678,6 +680,8 @@ impl AuthManager {
     }
 
     pub fn validate_write_token(&self, token: &str, headers: &HeaderMap) -> Result<Uuid, Error> {
+        #[cfg(feature = "debug-logging")]
+        debug!("Headers for validating write token {:?}", headers);
         let (read_token, write_token) = {
             let t: Vec<&str> = token.split(':').collect::<Vec<&str>>();
             if t.len() != 2 {
