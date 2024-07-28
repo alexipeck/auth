@@ -14,17 +14,16 @@ axum = {version = "0.7.5", features = ["http2", "tokio", "json"]}
 axum-core = "0.4.3"
 axum-extra = {version = "0.9.3", features = ["typed-header"]}
 base64 = "0.22.1"
-blake3 = "1.5.1"
+blake3 = "1.5.3"
 chrono = {version = "0.4.38", features = ["serde"]}
 cipher = "0.4.4"
 cookie = {version = "0.18.1", features = ["secure", "percent-encode"]}
-diesel = {version = "2.2.1", default-features = false, features = ["sqlite", "extras", "32-column-tables", "r2d2"]}
+diesel = {version = "2.2.2", default-features = false, features = ["sqlite", "extras", "32-column-tables", "r2d2"]}
 diesel_migrations = "2.2.0"
 directories = "5.0.1"
 email_address = {version = "0.2.5", features = ["serde_support"]}
 google-authenticator = "0.4.2"
 lettre = "0.11.7"
-libsqlite3-sys = {version = ">=0.17.2, <0.27.0", features = ["bundled"]}
 peck-lib = {git = "https://github.com/alexipeck/peck-lib", features = ["datetime", "hashing", "uid", "crypto", "auth"]}
 pkcs1 = "0.7.5"
 rand = "0.8.5"
@@ -33,14 +32,14 @@ rand_core = {version = "0.6.4", features = ["getrandom"]}
 regex = "1.10.5"
 rsa = {version = "0.9.6", features = ["sha2", "serde", "std"]}
 rust-argon2 = "2.1.0"
-serde = {version = "1.0.203", features = ["derive"]}
+serde = {version = "1.0.204", features = ["derive"]}
 serde_json = {version = "1.0.120"}
 signature = "2.2.0"
-thiserror = "1.0.61"
-tokio = {version = "1.38.0", default-features = false, features = ["macros", "net", "rt-multi-thread", "time", "signal"]}
-toml = "0.8.14"
+thiserror = "1.0.63"
+tokio = {version = "1.39.2", default-features = false, features = ["macros", "net", "rt-multi-thread", "time", "signal"]}
+toml = "0.8.16"
 tower-http = {version = "0.5.2", features = ["cors", "trace"]}
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
 tracing-subscriber = {version = "0.3.18"}
-uuid = {version = "1.9.1", features = ["v4", "serde"]}
+uuid = {version = "1.10.0", features = ["v4", "serde"]}
