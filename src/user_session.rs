@@ -7,7 +7,6 @@ use chrono::{DateTime, Duration, Utc};
 use peck_lib::auth::token_pair::TokenPair;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::debug;
 use uuid::Uuid;
 
 /// Client representation of their session, with read and write being their tokenised rights for read and write at any given time,
