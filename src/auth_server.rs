@@ -163,6 +163,7 @@ pub struct Builder {
     stop: Option<Arc<AtomicBool>>,
     stop_notify: Option<Arc<Notify>>,
     uid_authority: Option<Arc<UIDAuthority>>,
+    persistent_encryption_keys_path: Option<String>,
 
     //defaulted
     read_lifetime_seconds: i64,
@@ -186,6 +187,7 @@ impl Default for Builder {
             stop: None,
             stop_notify: None,
             uid_authority: None,
+            persistent_encryption_keys_path: None,
             read_lifetime_seconds: DEFAULT_READ_LIFETIME_SECONDS,
             write_lifetime_seconds: DEFAULT_WRITE_LIFETIME_SECONDS,
             max_session_lifetime_seconds: DEFAULT_MAX_SESSION_LIFETIME_SECONDS,
@@ -195,6 +197,10 @@ impl Default for Builder {
 }
 
 impl Builder {
+    pub fn persistent_encryption_keys_path(mut self, path: String) -> Self {
+        self.persistent_encryption_keys_path = Some(path);
+        self
+    }
     pub fn cookie_name(mut self, cookie_name: String) -> Self {
         self.cookie_name = Some(cookie_name);
         self
@@ -321,6 +327,7 @@ impl Builder {
             self.port.unwrap(),
             self.cookie_domain.unwrap(),
             self.uid_authority,
+            self.persistent_encryption_keys_path,
             self.read_lifetime_seconds,
             self.write_lifetime_seconds,
             self.max_session_lifetime_seconds,

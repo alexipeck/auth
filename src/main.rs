@@ -46,6 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .smtp_sender_address(env::var("SMTP_SENDER_ADDRESS").unwrap())
         .smtp_username(env::var("SMTP_USER").unwrap())
         .smtp_password(env::var("SMTP_PASSWORD").unwrap())
+        .persistent_encryption_keys_path("/config/test.toml".into())
         .stop(stop.to_owned())
         .stop_notify(stop_notify.to_owned())
         .start_server()

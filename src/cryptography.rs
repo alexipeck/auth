@@ -71,7 +71,6 @@ impl EncryptionKeys {
             private_key,
             public_key,
             symmetric_key: rand::thread_rng().gen::<[u8; 32]>(),
-            /* iv: Aes256Gcm::generate_nonce(&mut OsRng), //rand::thread_rng().gen() */
         })
     }
 

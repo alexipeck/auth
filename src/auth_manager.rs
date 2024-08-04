@@ -26,6 +26,7 @@ use regex::RegexSet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
+    path::Path,
     sync::Arc,
 };
 use tokio::sync::RwLock;
@@ -175,6 +176,7 @@ impl AuthManager {
         port: u16,
         cookie_domain: String,
         uid_authority: Option<Arc<UIDAuthority>>,
+        persistent_encryption_keys_path: Option<String>,
         read_lifetime_seconds: i64,
         write_lifetime_seconds: i64,
         max_session_lifetime_seconds: i64,
@@ -214,7 +216,22 @@ impl AuthManager {
                 .collect::<HashMap<EmailAddress, Uuid>>(),
         ));
         let users: Arc<RwLock<HashMap<Uuid, User>>> = Arc::new(RwLock::new(users));
-        let encryption_keys: EncryptionKeys = EncryptionKeys::new()?;
+        let encryption_keys: EncryptionKeys = match persistent_encryption_keys_path {
+            Some(path) => {
+                if !Path::new(&path).exists() {
+                    let agent_encryption_keys: EncryptionKeys = EncryptionKeys::new()?;
+                    agent_encryption_keys.save_to_file(&path)?;
+                    agent_encryption_keys
+                } else {
+                    EncryptionKeys::from_file(&path)?
+                }
+            }
+            None => {
+                let encryption_keys = EncryptionKeys::new()?;
+                info!("Auth server running in ephemeral key mode, they will not survive a server restart");
+                encryption_keys
+            }
+        };
         let smtp_manager: SmtpManager = SmtpManager::new(
             smtp_server,
             smtp_sender_address,
