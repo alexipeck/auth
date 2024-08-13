@@ -263,6 +263,9 @@ impl AuthManager {
 }
 
 impl AuthManager {
+    pub fn get_read_lifetime_seconds(&self) -> i64 {
+        self.read_lifetime_seconds.to_owned()
+    }
     pub fn setup_flow_with_lifetime<T: Serialize + DeserializeOwned>(
         &self,
         headers: &HeaderMap,

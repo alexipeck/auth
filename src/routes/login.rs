@@ -17,6 +17,7 @@ use axum_extra::{
     headers::{authorization::Bearer, Authorization},
     TypedHeader,
 };
+use chrono::{Duration, Utc};
 use peck_lib::auth::token_pair::TokenPair;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
@@ -87,14 +88,14 @@ async fn login_with_identity(
     headers: HeaderMap,
     auth_manager: Arc<AuthManager>,
 ) -> Result<ClientState, Error> {
-    let (user_profile, expiry) = auth_manager
+    let (user_profile, _expiry) = auth_manager
         .validate_identity(identity, key, &headers)
         .await?;
     let user_session = UserSession::create_aligned_read_from_user_id(
         user_profile.user_id,
         &headers,
         auth_manager.to_owned(),
-        expiry,
+        Utc::now() + Duration::seconds(auth_manager.get_read_lifetime_seconds()),
     )
     .await?;
     info!(
