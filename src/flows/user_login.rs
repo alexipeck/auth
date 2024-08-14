@@ -25,12 +25,11 @@ impl LoginFlow {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
 pub struct LoginCredentials {
     pub email: EmailAddress,
     pub password: String,
     #[serde(rename = "twoFACode")]
-    pub two_fa_code: SixDigitString,
+    pub two_fa_code: String, /* SixDigitString */
 }
 
 #[derive(Serialize, Debug)]
