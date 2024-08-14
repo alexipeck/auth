@@ -10,8 +10,10 @@ use crate::{
         },
         setup::{setup_user_account_route, validate_invite_token_route},
     },
-    DEFAULT_INVITE_LIFETIME_SECONDS, DEFAULT_MAX_SESSION_LIFETIME_SECONDS,
-    DEFAULT_READ_LIFETIME_SECONDS, DEFAULT_WRITE_LIFETIME_SECONDS,
+    DEFAULT_INVITE_FLOW_LIFETIME_SECONDS, DEFAULT_INVITE_LIFETIME_SECONDS,
+    DEFAULT_LOGIN_FLOW_LIFETIME_SECONDS, DEFAULT_MAX_SESSION_LIFETIME_SECONDS,
+    DEFAULT_READ_LIFETIME_SECONDS, DEFAULT_REFRESH_IN_LAST_X_SECONDS,
+    DEFAULT_WRITE_LIFETIME_SECONDS,
 };
 use axum::{
     http::{
@@ -149,7 +151,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
 
 pub struct Builder {
     //required
-    cookie_name: Option<String>,
+    cookie_name_base: Option<String>,
     allowed_origins: Vec<String>,
     smtp_server: Option<String>,
     smtp_sender_address: Option<String>,
@@ -168,14 +170,17 @@ pub struct Builder {
     //defaulted
     read_lifetime_seconds: i64,
     write_lifetime_seconds: i64,
+    refresh_in_last_x_seconds: i64,
     max_session_lifetime_seconds: i64,
     invite_lifetime_seconds: i64,
+    login_flow_lifetime_seconds: i64,
+    invite_flow_lifetime_seconds: i64,
 }
 
 impl Default for Builder {
     fn default() -> Self {
         Self {
-            cookie_name: None,
+            cookie_name_base: None,
             allowed_origins: Vec::new(),
             smtp_server: None,
             smtp_sender_address: None,
@@ -190,8 +195,11 @@ impl Default for Builder {
             persistent_encryption_keys_path: None,
             read_lifetime_seconds: DEFAULT_READ_LIFETIME_SECONDS,
             write_lifetime_seconds: DEFAULT_WRITE_LIFETIME_SECONDS,
+            refresh_in_last_x_seconds: DEFAULT_REFRESH_IN_LAST_X_SECONDS,
             max_session_lifetime_seconds: DEFAULT_MAX_SESSION_LIFETIME_SECONDS,
             invite_lifetime_seconds: DEFAULT_INVITE_LIFETIME_SECONDS,
+            login_flow_lifetime_seconds: DEFAULT_LOGIN_FLOW_LIFETIME_SECONDS,
+            invite_flow_lifetime_seconds: DEFAULT_INVITE_FLOW_LIFETIME_SECONDS,
         }
     }
 }
@@ -201,8 +209,8 @@ impl Builder {
         self.persistent_encryption_keys_path = Some(path);
         self
     }
-    pub fn cookie_name(mut self, cookie_name: String) -> Self {
-        self.cookie_name = Some(cookie_name);
+    pub fn cookie_name_base(mut self, cookie_name_base: String) -> Self {
+        self.cookie_name_base = Some(cookie_name_base);
         self
     }
 
@@ -283,7 +291,7 @@ impl Builder {
 
     pub async fn start_server(self) -> Result<Arc<AuthServer>, Error> {
         let mut missing_properties: Vec<RequiredProperties> = Vec::new();
-        if self.cookie_name.is_none() {
+        if self.cookie_name_base.is_none() {
             missing_properties.push(RequiredProperties::CookieName);
         }
         if self.allowed_origins.is_empty() {
@@ -317,7 +325,7 @@ impl Builder {
         }
 
         let auth_manager: AuthManager = AuthManager::new(
-            self.cookie_name.unwrap(),
+            self.cookie_name_base.unwrap(),
             self.allowed_origins,
             self.smtp_server.unwrap(),
             self.smtp_sender_address.unwrap(),
@@ -330,7 +338,10 @@ impl Builder {
             self.persistent_encryption_keys_path,
             self.read_lifetime_seconds,
             self.write_lifetime_seconds,
+            self.refresh_in_last_x_seconds,
             self.max_session_lifetime_seconds,
+            self.login_flow_lifetime_seconds,
+            self.invite_flow_lifetime_seconds,
             self.invite_lifetime_seconds,
         )
         .await?;

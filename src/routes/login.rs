@@ -2,14 +2,17 @@ use crate::{
     auth_manager::{AuthManager, FlowType},
     cryptography::decrypt_with_private_key,
     error::{AuthenticationError, Error},
-    flows::user_login::{LoginCredentials, LoginFlow, UserLogin},
+    flows::{
+        user_login::{LoginCredentials, LoginFlow, UserLogin},
+        Lifetime,
+    },
     user::ClientState,
     user_session::UserSession,
 };
 use axum::{
     body::Body,
     extract::ConnectInfo,
-    http::{HeaderMap, StatusCode},
+    http::{header::SET_COOKIE, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Extension, Json,
 };
@@ -18,6 +21,7 @@ use axum_extra::{
     TypedHeader,
 };
 use chrono::{Duration, Utc};
+use cookie::{Cookie, CookieBuilder, SameSite};
 use peck_lib::auth::token_pair::TokenPair;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
@@ -40,20 +44,53 @@ fn init_restricted_flow(
     ))
 }
 
+fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result<String, Error> {
+    let token_pair: TokenPair = auth_manager.setup_flow_with_lifetime::<Option<bool>>(
+        &headers,
+        FlowType::Login,
+        Duration::seconds(auth_manager.config.login_flow_lifetime_seconds),
+        true,
+        None,
+    )?;
+    Ok(token_pair.token)
+}
+
 pub async fn init_login_flow_route(
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    #[cfg(feature = "debug-logging")]
-    tracing::debug!("{:?}", headers);
-    match init_restricted_flow(
-        headers,
-        auth_manager,
-        chrono::Duration::minutes(5),
-        FlowType::Login,
-    ) {
-        Ok(login_flow) => (StatusCode::OK, Json(login_flow)).into_response(),
+    match init_login_flow(headers, auth_manager.to_owned()) {
+        Ok(token) => {
+            //reduced lifetime for leeway, preventing attempted use of expired tokens and accounting for latency
+            //system time agnostic, client's tick rate still needs to be correct
+            let client_cookie_lifetime_seconds =
+                auth_manager.config.login_flow_lifetime_seconds - 5;
+            let cookie: Cookie = CookieBuilder::new(
+                format!(
+                    "{base}_login_flow",
+                    base = auth_manager.config.get_cookie_name_base()
+                ),
+                token,
+            )
+            .http_only(true)
+            .secure(true)
+            .path("/")
+            .same_site(SameSite::Strict)
+            .max_age(cookie::time::Duration::seconds(
+                client_cookie_lifetime_seconds,
+            ))
+            .build();
+
+            (
+                StatusCode::OK,
+                [(SET_COOKIE, cookie.to_string())],
+                Json(Lifetime {
+                    lifetime_seconds: client_cookie_lifetime_seconds,
+                }),
+            )
+                .into_response()
+        }
         Err(err) => {
             warn!("{}", err);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()

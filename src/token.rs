@@ -128,7 +128,6 @@ impl<'de> Deserialize<'de> for SignatureWrapper {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Token {
-    /* pub alg: Algorithm, */
     pub inner: TokenInner,
     pub signature: SignatureWrapper,
 }
