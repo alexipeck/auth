@@ -29,6 +29,7 @@ impl LoginFlow {
 pub struct LoginCredentials {
     pub email: EmailAddress,
     pub password: String,
+    #[serde(rename = "twoFACode")]
     pub two_fa_code: SixDigitString,
 }
 
