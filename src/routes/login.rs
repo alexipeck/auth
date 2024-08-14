@@ -3,7 +3,7 @@ use crate::{
     cryptography::decrypt_with_private_key,
     error::{AuthenticationError, Error},
     flows::{
-        user_login::{LoginCredentials, LoginFlow, UserLogin},
+        user_login::{LoginCredentials, LoginFlow},
         Lifetime,
     },
     user::ClientState,
@@ -146,7 +146,7 @@ async fn login_with_identity(
     })
 }
 
-async fn login_with_credentials(
+/* async fn login_with_credentials(
     user_login: UserLogin,
     headers: HeaderMap,
     auth_manager: Arc<AuthManager>,
@@ -180,17 +180,20 @@ async fn login_with_credentials(
         user_profile,
         identity: Some(identity),
     })
-}
+} */
 
 pub async fn login_with_credentials_route(
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
+    TypedHeader(cookie): TypedHeader<axum_extra::headers::Cookie>,
     headers: HeaderMap,
-    axum::response::Json(user_login): axum::response::Json<UserLogin>,
+    axum::response::Json(user_login): axum::response::Json<LoginCredentials>,
 ) -> impl IntoResponse {
     #[cfg(feature = "debug-logging")]
     tracing::debug!("{:?}", headers);
-    match login_with_credentials(user_login, headers, auth_manager.to_owned()).await {
+    tracing::debug!("{:?}", _addr);
+    tracing::debug!("{:?}", user_login);
+    /* match login_with_credentials(user_login, headers, auth_manager.to_owned()).await {
         Ok(client_state) => {
             /* let cookie = CookieBuilder::new(auth_manager.config.get_cookie_name(), identity_cookie)
             .path("/")
@@ -229,7 +232,8 @@ pub async fn login_with_credentials_route(
                 _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             }
         }
-    }
+    } */
+    StatusCode::OK.into_response();
 }
 
 #[derive(Debug, Serialize, Deserialize)]
