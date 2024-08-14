@@ -134,7 +134,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
 #[derive(Default)]
 pub struct Builder {
     //required
-    cookie_name: Option<String>,
+    cookie_name_base: Option<String>,
     allowed_origin: Option<String>,
     smtp_server: Option<String>,
     smtp_sender_address: Option<String>,
@@ -147,11 +147,53 @@ pub struct Builder {
     stop_notify: Option<Arc<Notify>>,
     database_url: Option<String>,
     uid_authority: Option<Arc<UIDAuthority>>,
+    read_lifetime_seconds: Option<i64>,
+    write_lifetime_seconds: Option<i64>,
+    refresh_in_last_x_seconds: Option<i64>,
+    max_session_lifetime_seconds: Option<i64>,
+    login_flow_lifetime_seconds: Option<i64>,
+    invite_flow_lifetime_seconds: Option<i64>,
+    invite_lifetime_seconds: Option<i64>,
 }
 
 impl Builder {
-    pub fn cookie_name(mut self, cookie_name: String) -> Self {
-        self.cookie_name = Some(cookie_name);
+    pub fn login_flow_lifetime_seconds(mut self, login_flow_lifetime_seconds: i64) -> Self {
+        self.login_flow_lifetime_seconds = Some(login_flow_lifetime_seconds);
+        self
+    }
+
+    pub fn invite_flow_lifetime_seconds(mut self, invite_flow_lifetime_seconds: i64) -> Self {
+        self.invite_flow_lifetime_seconds = Some(invite_flow_lifetime_seconds);
+        self
+    }
+
+    pub fn invite_lifetime_seconds(mut self, invite_lifetime_seconds: i64) -> Self {
+        self.invite_lifetime_seconds = Some(invite_lifetime_seconds);
+        self
+    }
+
+    pub fn read_lifetime_seconds(mut self, read_lifetime_seconds: i64) -> Self {
+        self.read_lifetime_seconds = Some(read_lifetime_seconds);
+        self
+    }
+
+    pub fn write_lifetime_seconds(mut self, write_lifetime_seconds: i64) -> Self {
+        self.write_lifetime_seconds = Some(write_lifetime_seconds);
+        self
+    }
+
+    pub fn refresh_in_last_x_seconds(mut self, refresh_in_last_x_seconds: i64) -> Self {
+        self.refresh_in_last_x_seconds = Some(refresh_in_last_x_seconds);
+        self
+    }
+
+    pub fn max_session_lifetime_seconds(mut self, max_session_lifetime_seconds: i64) -> Self {
+        self.max_session_lifetime_seconds = Some(max_session_lifetime_seconds);
+        self
+    }
+
+    pub fn cookie_name_base(mut self, cookie_name: String) -> Self {
+        self.cookie_name_base = Some(cookie_name);
         self
     }
 
@@ -207,7 +249,7 @@ impl Builder {
 
     pub async fn start_server(self) -> Result<Arc<AuthServer>, Error> {
         let mut missing_properties: Vec<RequiredProperties> = Vec::new();
-        if self.cookie_name.is_none() {
+        if self.cookie_name_base.is_none() {
             missing_properties.push(RequiredProperties::CookieName);
         }
         if self.allowed_origin.is_none() {
@@ -241,7 +283,7 @@ impl Builder {
             );
         }
         let auth_manager: AuthManager = AuthManager::new(
-            self.cookie_name.unwrap(),
+            self.cookie_name_base.unwrap(),
             self.allowed_origin.unwrap(),
             self.smtp_server.unwrap(),
             self.smtp_sender_address.unwrap(),
@@ -250,6 +292,13 @@ impl Builder {
             self.database_url.unwrap(),
             self.port.unwrap(),
             self.uid_authority,
+            self.read_lifetime_seconds,
+            self.write_lifetime_seconds,
+            self.refresh_in_last_x_seconds,
+            self.max_session_lifetime_seconds,
+            self.login_flow_lifetime_seconds,
+            self.invite_flow_lifetime_seconds,
+            self.invite_lifetime_seconds,
         )?;
         let signals = Signals {
             stop: self.stop.unwrap_or(Arc::new(AtomicBool::new(false))),

@@ -11,8 +11,10 @@ use crate::{
     token::Token,
     user::{User, UserProfile, UserSafe},
     user_session::{ReadInternal, TokenMode, TokenPair, UserToken},
-    MAX_SESSION_LIFETIME_SECONDS, READ_LIFETIME_SECONDS, REFRESH_IN_LAST_X_SECONDS,
-    WRITE_LIFETIME_SECONDS,
+    DEFAULT_INVITE_FLOW_LIFETIME_SECONDS, DEFAULT_INVITE_LIFETIME_SECONDS,
+    DEFAULT_LOGIN_FLOW_LIFETIME_SECONDS, DEFAULT_MAX_SESSION_LIFETIME_SECONDS,
+    DEFAULT_READ_LIFETIME_SECONDS, DEFAULT_REFRESH_IN_LAST_X_SECONDS,
+    DEFAULT_WRITE_LIFETIME_SECONDS,
 };
 use axum::http::{HeaderMap, HeaderValue};
 use chrono::{DateTime, Duration, Utc};
@@ -78,19 +80,57 @@ impl Default for Regexes {
 }
 
 pub struct Config {
-    cookie_name: String,
+    cookie_name_base: String,
     allowed_origin: HeaderValue,
+    read_lifetime_seconds: i64,
+    write_lifetime_seconds: i64,
+    refresh_in_last_x_seconds: i64,
+    max_session_lifetime_seconds: i64,
+    iteration_limit: u32,
+    pub login_flow_lifetime_seconds: i64,
+    pub invite_flow_lifetime_seconds: i64,
+    pub invite_lifetime_seconds: i64,
 }
 
 impl Config {
-    pub fn new(cookie_name: String, allowed_origin: HeaderValue) -> Self {
+    pub fn new(
+        cookie_name: String,
+        allowed_origin: HeaderValue,
+        read_lifetime_seconds: Option<i64>,
+        write_lifetime_seconds: Option<i64>,
+        refresh_in_last_x_seconds: Option<i64>,
+        max_session_lifetime_seconds: Option<i64>,
+        login_flow_lifetime_seconds: Option<i64>,
+        invite_flow_lifetime_seconds: Option<i64>,
+        invite_lifetime_seconds: Option<i64>,
+    ) -> Self {
+        let read_lifetime_seconds = read_lifetime_seconds.unwrap_or(DEFAULT_READ_LIFETIME_SECONDS);
+        let write_lifetime_seconds =
+            write_lifetime_seconds.unwrap_or(DEFAULT_WRITE_LIFETIME_SECONDS);
+        let refresh_in_last_x_seconds =
+            refresh_in_last_x_seconds.unwrap_or(DEFAULT_REFRESH_IN_LAST_X_SECONDS);
+        let max_session_lifetime_seconds =
+            max_session_lifetime_seconds.unwrap_or(DEFAULT_MAX_SESSION_LIFETIME_SECONDS);
         Self {
-            cookie_name,
+            cookie_name_base: cookie_name,
             allowed_origin,
+            read_lifetime_seconds,
+            write_lifetime_seconds,
+            refresh_in_last_x_seconds,
+            max_session_lifetime_seconds,
+            iteration_limit: (max_session_lifetime_seconds
+                / (read_lifetime_seconds - refresh_in_last_x_seconds))
+                as u32,
+            login_flow_lifetime_seconds: login_flow_lifetime_seconds
+                .unwrap_or(DEFAULT_LOGIN_FLOW_LIFETIME_SECONDS),
+            invite_flow_lifetime_seconds: invite_flow_lifetime_seconds
+                .unwrap_or(DEFAULT_INVITE_FLOW_LIFETIME_SECONDS),
+            invite_lifetime_seconds: invite_lifetime_seconds
+                .unwrap_or(DEFAULT_INVITE_LIFETIME_SECONDS),
         }
     }
-    pub fn get_cookie_name(&self) -> &String {
-        &self.cookie_name
+    pub fn get_cookie_name_base(&self) -> &str {
+        &self.cookie_name_base
     }
     pub fn get_allowed_origin(&self) -> &HeaderValue {
         &self.allowed_origin
@@ -153,7 +193,7 @@ pub struct AuthManager {
 
 impl AuthManager {
     pub fn new(
-        cookie_name: String,
+        cookie_name_base: String,
         allowed_origin: String,
         smtp_server: String,
         smtp_sender_address: String,
@@ -162,6 +202,13 @@ impl AuthManager {
         database_url: String,
         port: u16,
         uid_authority: Option<Arc<UIDAuthority>>,
+        read_lifetime_seconds: Option<i64>,
+        write_lifetime_seconds: Option<i64>,
+        refresh_in_last_x_seconds: Option<i64>,
+        max_session_lifetime_seconds: Option<i64>,
+        login_flow_lifetime_seconds: Option<i64>,
+        invite_flow_lifetime_seconds: Option<i64>,
+        invite_lifetime_seconds: Option<i64>,
     ) -> Result<Self, Error> {
         let allowed_origin: HeaderValue = match allowed_origin.parse() {
             Ok(allowed_origin) => allowed_origin,
@@ -189,7 +236,17 @@ impl AuthManager {
             users,
             email_to_id_registry,
             regexes: Regexes::default(),
-            config: Config::new(cookie_name, allowed_origin),
+            config: Config::new(
+                cookie_name_base,
+                allowed_origin,
+                read_lifetime_seconds,
+                write_lifetime_seconds,
+                refresh_in_last_x_seconds,
+                max_session_lifetime_seconds,
+                login_flow_lifetime_seconds,
+                invite_flow_lifetime_seconds,
+                invite_lifetime_seconds,
+            ),
             encryption_keys,
             smtp_manager,
             database_url,
@@ -263,11 +320,12 @@ impl AuthManager {
                 TokenMode::Read(Box::new(ReadInternal::new(
                     filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
                         .hash_debug(),
-                    Duration::seconds(MAX_SESSION_LIFETIME_SECONDS),
+                    Duration::seconds(self.config.max_session_lifetime_seconds),
+                    self.config.iteration_limit,
                 ))),
                 user_id,
             ),
-            Duration::seconds(READ_LIFETIME_SECONDS),
+            Duration::seconds(self.config.read_lifetime_seconds),
         )
     }
 
@@ -279,17 +337,18 @@ impl AuthManager {
         let read_internal: ReadInternal = ReadInternal::new(
             filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
                 .hash_debug(),
-            Duration::seconds(MAX_SESSION_LIFETIME_SECONDS),
+            Duration::seconds(self.config.max_session_lifetime_seconds),
+            self.config.iteration_limit,
         );
         let write_internal: crate::user_session::WriteInternal =
             read_internal.generate_write_internal();
         let read_token: TokenPair = self.create_signed_and_encrypted_token_with_lifetime(
             UserToken::new(TokenMode::Read(Box::new(read_internal)), user_id),
-            Duration::seconds(READ_LIFETIME_SECONDS),
+            Duration::seconds(self.config.read_lifetime_seconds),
         )?;
         let write_token: TokenPair = self.create_signed_and_encrypted_token_with_lifetime(
             UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
-            Duration::seconds(WRITE_LIFETIME_SECONDS),
+            Duration::seconds(self.config.write_lifetime_seconds),
         )?;
         Ok((read_token, write_token))
     }
@@ -304,7 +363,9 @@ impl AuthManager {
             return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::Expired,
             ));
-        } else if existing_expiry.timestamp() - Utc::now().timestamp() > REFRESH_IN_LAST_X_SECONDS {
+        } else if existing_expiry.timestamp() - Utc::now().timestamp()
+            > self.config.refresh_in_last_x_seconds
+        {
             return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::NotUsedWithinValidRefreshPeriod,
             ));
@@ -315,6 +376,7 @@ impl AuthManager {
             expiry = read_mode.upgrade(
                 &filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile)
                     .hash_debug(),
+                self.config.read_lifetime_seconds,
             )?;
         } else {
             return Err(Error::ReadTokenAsRefreshToken(
@@ -350,7 +412,7 @@ impl AuthManager {
             read_internal.generate_write_internal();
         self.create_signed_and_encrypted_token_with_lifetime(
             UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
-            Duration::seconds(WRITE_LIFETIME_SECONDS),
+            Duration::seconds(self.config.read_lifetime_seconds),
         )
         //TODO: Add requirement for minimum number of expected headers to be present to prevent clients sending minimal headers
     }
@@ -447,7 +509,7 @@ impl AuthManager {
         );
         let token_pair = self.create_signed_and_encrypted_token_with_lifetime(
             UserInvite::new(email.to_owned(), user_id),
-            Duration::minutes(600),
+            Duration::seconds(self.config.invite_lifetime_seconds),
         )?;
         if let Err(err) = save_user(&mut establish_connection(&self.database_url), &user) {
             panic!("{}", err);

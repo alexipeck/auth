@@ -44,29 +44,3 @@ pub async fn get_write_token_route(
         }
     }
 }
-
-/* pub fn get_new_write_token() -> Result<(), Error> {}
-
-pub fn get_new_write_token_route(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Extension(auth_manager): Extension<Arc<AuthManager>>,
-    headers: HeaderMap,
-    axum::response::Json(user_login): axum::response::Json<UserLogin>,
-) -> impl IntoResponse {
-    let (token, expiry) = auth_manager.setup_flow::<Option<bool>>(
-        &headers,
-        FlowType::Write,
-        Duration::minutes(5),
-        None,
-    )?;
-    match  {
-        Ok() => {
-            FullResponseData::basic(ResponseData::).into_response()
-        }
-        Err(err) => {
-            warn!("{}", err);
-            FullResponseData::basic(ResponseData::Unauthorised).into_response()
-            //TODO: Split out into actual correct errors
-        }
-    }
-} */

@@ -46,7 +46,7 @@ fn validate_invite_token(
     let two_fa_client_secret: String = user_invite_instance.get_two_fa_client_secret().to_owned();
     //TODO: Check expiry, if less than 5 minutes, make it the setup flow duration
     let token_pair: TokenPair;
-    if (expiry + Duration::minutes(5)).expired() {
+    if (expiry + Duration::seconds(auth_manager.config.invite_lifetime_seconds)).expired() {
         token_pair = auth_manager.setup_flow_with_expiry(
             headers,
             FlowType::Setup,
@@ -57,7 +57,7 @@ fn validate_invite_token(
         token_pair = auth_manager.setup_flow_with_lifetime(
             headers,
             FlowType::Setup,
-            Duration::minutes(5),
+            Duration::seconds(auth_manager.config.invite_flow_lifetime_seconds),
             user_invite_instance,
         )?;
     };

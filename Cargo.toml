@@ -1,39 +1,41 @@
 [package]
 name = "auth"
-version = "0.1.6"
+version = "0.2.0"
 edition = "2021"
 authors = ["Alexi Peck <alexinicolaspeck@gmail.com>"]
 
 [dependencies]
-serde = { version = "1.0.195", features = ["derive"] }
-serde_json = { version = "1.0.111" }
-email_address = { version = "0.2.4", features = ["serde_support"]}
-chrono = { version = "0.4.31", features = ["serde"] }
-tokio = { version = "1.35.1", default-features = false, features = ["macros", "net", "rt-multi-thread", "time", "signal"] }
-base64 = "0.21.5"
-axum = { version = "0.7.3", features = ["http2", "tokio"] }
-axum-extra = { version = "0.9.1", features = ["typed-header"] }
-axum-core = "0.4.2"
-tower-http = { version = "0.5.0", features = ["cors", "trace"]}
-uuid = { version = "1.6.1", features = ["v4", "serde"] }
-blake3 = "1.5.0"
-parking_lot = "0.12.1"
-cookie = "0.18.0"
-thiserror = "1.0.56"
+serde = { version = "1.0.207", features = ["derive"] }
+serde_json = { version = "1.0.124" }
+email_address = { version = "0.2.9", features = ["serde_support"]}
+chrono = { version = "0.4.38", features = ["serde"] }
+tokio = { version = "1.39.2", default-features = false, features = ["macros", "net", "rt-multi-thread", "time", "signal"] }
+base64 = "0.22.1"
+axum = { version = "0.7.5", features = ["http2", "tokio"] }
+axum-extra = { version = "0.9.3", features = ["typed-header", "cookie"] }
+axum-core = "0.4.3"
+tower-http = { version = "0.5.2", features = ["cors", "trace"]}
+uuid = { version = "1.10.0", features = ["v4", "serde"] }
+blake3 = "1.5.3"
+parking_lot = "0.12.3"
+cookie = "0.18.1"
+thiserror = "1.0.63"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.18" }
 tracing = "0.1.40"
 directories = "5.0.1"
-regex = "1.10.2"
-rust-argon2 = "2.0.0"
+regex = "1.10.6"
+rust-argon2 = "2.1.0"
 google-authenticator = "0.4.2"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 rand_core = { version = "0.6.4", features = ["getrandom"] }
-openssl = { version = "0.10.62", features = ["vendored"] }
-lettre = "0.11.3"
-diesel = { version = "2.1.4", default-features = false, features = ["sqlite", "extras", "32-column-tables", "r2d2"] }
-diesel_migrations = "2.1.0"
-libsqlite3-sys = { version = ">=0.17.2, <0.27.0", features = ["bundled"] }
-toml = "0.8.8"
+openssl = { version = "0.10.66", features = ["vendored"] }
+lettre = "0.11.7"
+diesel = { version = "2.2.2", default-features = false, features = ["sqlite", "extras", "32-column-tables", "r2d2"] }
+diesel_migrations = "2.2.0"
+toml = "0.8.19"
 peck-lib = { git = "https://github.com/alexipeck/peck-lib" }
+
+[target.'cfg(windows)'.dependencies]
+libsqlite3-sys = { version = ">=0.17.2, <0.27.0", features = ["bundled"] }

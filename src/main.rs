@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stop = Arc::new(AtomicBool::new(false));
 
     let auth_server: Arc<AuthServer> = match AuthServer::builder()
-        .cookie_name("uamtoken".to_string())
+        .cookie_name_base("uamtoken".to_string())
         .allowed_origin("http://dev.clouduam.com:81".to_owned()) //https://clouduam.com
         .smtp_server("mail.smtp2go.com".to_string())
         .smtp_sender_address(env::var("SMTP_SENDER_ADDRESS").unwrap())
