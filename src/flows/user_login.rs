@@ -29,7 +29,7 @@ pub struct LoginCredentials {
     pub email: EmailAddress,
     pub password: String,
     #[serde(rename = "twoFACode")]
-    pub two_fa_code: String, /* SixDigitString */
+    pub two_fa_code: SixDigitString,
 }
 
 #[derive(Serialize, Debug)]
