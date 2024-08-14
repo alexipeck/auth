@@ -5,7 +5,6 @@ use crate::{
     flows::user_setup::{
         InviteToken, SetupCredentials, UserInvite, UserInviteInstance, UserSetup, UserSetupFlow,
     },
-    user_session::TokenPair,
 };
 use axum::{
     extract::ConnectInfo,
@@ -16,22 +15,23 @@ use axum::{
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use google_authenticator::GoogleAuthenticator;
-use peck_lib::datetime::r#trait::Expired;
+use peck_lib::{auth::token_pair::TokenPair, datetime::r#trait::Expired};
 use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
 
-fn validate_invite_token(
-    invite_token: &String,
+async fn validate_invite_token(
+    invite_token: &str,
     headers: &HeaderMap,
     auth_manager: Arc<AuthManager>,
 ) -> Result<UserSetupFlow, Error> {
     let (user_invite_instance, expiry) = {
         let (user_invite, expiry) = auth_manager.verify_and_decrypt::<UserInvite>(invite_token)?;
-        let user_setup_incomplete: Option<bool> =
-            auth_manager.user_setup_incomplete(user_invite.get_user_id());
+        let user_setup_incomplete: Option<bool> = auth_manager
+            .user_setup_incomplete(user_invite.get_user_id())
+            .await;
         if user_setup_incomplete.is_none() {
             return Err(Error::AccountSetup(AccountSetupError::InvalidInvite));
-        } else if user_setup_incomplete.unwrap() == false {
+        } else if !user_setup_incomplete.unwrap() {
             return Err(Error::AccountSetup(
                 AccountSetupError::AccountSetupAlreadyComplete,
             ));
@@ -51,6 +51,7 @@ fn validate_invite_token(
             headers,
             FlowType::Setup,
             expiry,
+            true,
             user_invite_instance,
         )?;
     } else {
@@ -61,15 +62,14 @@ fn validate_invite_token(
             user_invite_instance,
         )?;
     };
-
-    let public_encryption_key = auth_manager
-        .encryption_keys
-        .get_public_encryption_key_string()?;
     Ok(UserSetupFlow::new(
         token_pair,
         email,
         two_fa_client_secret,
-        public_encryption_key,
+        auth_manager
+            .encryption_keys
+            .get_public_encryption_key()
+            .to_owned(),
     ))
 }
 
@@ -79,7 +79,9 @@ pub async fn validate_invite_token_route(
     headers: HeaderMap,
     axum::response::Json(invite_token): axum::response::Json<InviteToken>,
 ) -> impl IntoResponse {
-    match validate_invite_token(&invite_token.token, &headers, auth_manager) {
+    #[cfg(feature = "debug-logging")]
+    tracing::debug!("{:?}", headers);
+    match validate_invite_token(&invite_token.token, &headers, auth_manager).await {
         Ok(user_setup_flow) => (StatusCode::OK, Json(user_setup_flow)).into_response(),
         Err(err) => {
             warn!("{}", err);
@@ -95,30 +97,36 @@ pub async fn validate_invite_token_route(
     }
 }
 
-fn setup_user_account(
+async fn setup_user_account(
     user_setup: UserSetup,
     headers: &HeaderMap,
     auth_manager: Arc<AuthManager>,
 ) -> Result<(), Error> {
     let (user_invite_instance, _): (UserInviteInstance, Option<DateTime<Utc>>) =
-        auth_manager.verify_flow::<UserInviteInstance>(&user_setup.key, headers)?;
-    let user_setup_incomplete: Option<bool> =
-        auth_manager.user_setup_incomplete(user_invite_instance.get_user_id());
+        auth_manager.verify_flow::<UserInviteInstance>(
+            &user_setup.key,
+            headers,
+            &FlowType::Setup,
+            true,
+        )?;
+    let user_setup_incomplete: Option<bool> = auth_manager
+        .user_setup_incomplete(user_invite_instance.get_user_id())
+        .await;
     if user_setup_incomplete.is_none() {
         return Err(Error::AccountSetup(AccountSetupError::InvalidInvite));
-    } else if user_setup_incomplete.unwrap() == false {
+    } else if !user_setup_incomplete.unwrap() {
         return Err(Error::AccountSetup(
             AccountSetupError::AccountSetupAlreadyComplete,
         ));
     }
     let credentials: SetupCredentials = decrypt_url_safe_base64_with_private_key::<SetupCredentials>(
-        user_setup.encrypted_credentials,
-        &auth_manager.encryption_keys.get_private_decryption_key(),
+        user_setup.encrypted_credentials.into(),
+        auth_manager.encryption_keys.get_private_decryption_key(),
     )?;
 
     //2FA
     let auth = GoogleAuthenticator::new();
-    match auth.get_code(&user_invite_instance.get_two_fa_client_secret(), 0) {
+    match auth.get_code(user_invite_instance.get_two_fa_client_secret(), 0) {
         Ok(current_code) => {
             if credentials.two_fa_code != current_code {
                 return Err(Error::AccountSetup(AccountSetupError::Incorrect2FACode));
@@ -137,12 +145,14 @@ fn setup_user_account(
         return Err(Error::AccountSetup(AccountSetupError::InvalidPassword));
     }
 
-    auth_manager.setup_user(
-        user_invite_instance.get_email(),
-        credentials.password,
-        credentials.display_name,
-        user_invite_instance.get_two_fa_client_secret().to_owned(),
-    )?;
+    auth_manager
+        .setup_user(
+            user_invite_instance.get_email(),
+            credentials.password,
+            credentials.display_name,
+            user_invite_instance.get_two_fa_client_secret().to_owned(),
+        )
+        .await?;
 
     Ok(())
 }
@@ -153,7 +163,9 @@ pub async fn setup_user_account_route(
     headers: HeaderMap,
     axum::response::Json(user_setup): axum::response::Json<UserSetup>,
 ) -> impl IntoResponse {
-    match setup_user_account(user_setup, &headers, auth_manager) {
+    #[cfg(feature = "debug-logging")]
+    tracing::debug!("{:?}", headers);
+    match setup_user_account(user_setup, &headers, auth_manager).await {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => match err {
             Error::AccountSetup(AccountSetupError::InvalidPassword) => {

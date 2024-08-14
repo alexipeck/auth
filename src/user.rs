@@ -1,14 +1,14 @@
-use email_address::EmailAddress;
-use google_authenticator::GoogleAuthenticator;
-use serde::Serialize;
-use uuid::Uuid;
-
 use crate::{
     cryptography::generate_token,
     error::{AccountSetupError, AuthenticationError, Error},
     model::UserModel,
     user_session::UserSession,
 };
+use chrono::{DateTime, Utc};
+use email_address::EmailAddress;
+use google_authenticator::GoogleAuthenticator;
+use serde::Serialize;
+use uuid::Uuid;
 
 #[derive(Serialize, Debug, Clone)]
 pub struct User {
@@ -19,6 +19,7 @@ pub struct User {
     hashed_and_salted_password: String,
     #[serde(skip)]
     two_fa_client_secret: String,
+    disabled: bool,
 }
 
 impl User {
@@ -28,6 +29,7 @@ impl User {
         email: EmailAddress,
         hashed_and_salted_password: String,
         two_fa_client_secret: String,
+        disabled: bool,
     ) -> Self {
         Self {
             id,
@@ -35,6 +37,7 @@ impl User {
             email,
             hashed_and_salted_password,
             two_fa_client_secret,
+            disabled,
         }
     }
     pub fn to_model(&self) -> UserModel {
@@ -44,6 +47,7 @@ impl User {
             self.email.to_string(),
             self.hashed_and_salted_password.to_owned(),
             self.two_fa_client_secret.to_owned(),
+            self.disabled,
         )
     }
     pub fn to_safe(&self) -> UserSafe {
@@ -57,6 +61,9 @@ impl User {
         self.display_name.is_empty()
             || self.hashed_and_salted_password.is_empty()
             || self.two_fa_client_secret.is_empty()
+    }
+    pub fn disabled(&self) -> bool {
+        self.disabled
     }
     pub fn to_user_profile(&self) -> UserProfile {
         UserProfile {
@@ -73,7 +80,9 @@ impl User {
         two_fa_client_secret: String,
     ) -> Result<(), Error> {
         if !self.incomplete() {
-            return Err(Error::AccountSetup(AccountSetupError::AccountSetupAlreadyComplete).into());
+            return Err(Error::AccountSetup(
+                AccountSetupError::AccountSetupAlreadyComplete,
+            ));
         }
         let salt = generate_token(32);
         let hashed_and_salted_password = match argon2::hash_encoded(
@@ -87,6 +96,7 @@ impl User {
         self.hashed_and_salted_password = hashed_and_salted_password;
         self.two_fa_client_secret = two_fa_client_secret;
         self.display_name = display_name;
+        self.disabled = false;
         Ok(())
     }
     pub fn get_id(&self) -> &Uuid {
@@ -101,10 +111,11 @@ impl User {
     pub fn get_hashed_and_salted_password(&self) -> &String {
         &self.hashed_and_salted_password
     }
-    pub fn validate_two_fa_code(&self, two_fa_code: &str) -> Result<(), Error> {
+    pub fn validate_two_fa_code(&self, two_fa_code: &[u8; 6]) -> Result<(), Error> {
         let auth = GoogleAuthenticator::new();
         match auth.get_code(&self.two_fa_client_secret, 0) {
             Ok(current_code) => {
+                let two_fa_code: String = String::from_utf8(two_fa_code.to_vec()).unwrap();
                 if two_fa_code == current_code {
                     Ok(())
                 } else {
@@ -126,6 +137,13 @@ pub struct UserSafe {
 }
 
 #[derive(Debug, Serialize)]
+pub struct IdentityCookie {
+    pub name: String,
+    pub token: String,
+    pub expiry: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct UserProfile {
     pub display_name: String,
     pub email: EmailAddress,
@@ -136,4 +154,5 @@ pub struct UserProfile {
 pub struct ClientState {
     pub user_session: UserSession,
     pub user_profile: UserProfile,
+    pub identity: Option<IdentityCookie>,
 }

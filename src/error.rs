@@ -1,13 +1,13 @@
-use axum::http::header::InvalidHeaderValue;
 use email_address::EmailAddress;
 use google_authenticator::GAError;
-use peck_lib::impl_error_wrapper;
-use std::fmt;
+use peck_lib::{
+    auth::error::{RSAError, SerdeError},
+    impl_error_wrapper,
+    uid::error::UIDAuthorityError,
+};
 use thiserror::Error;
 use uuid::Uuid;
 
-impl_error_wrapper!(SerdeError, serde_json::error::Error);
-impl_error_wrapper!(OpenSSLError, openssl::error::ErrorStack);
 impl_error_wrapper!(Base64DecodeError, base64::DecodeError);
 impl_error_wrapper!(FromUtf8Error, std::string::FromUtf8Error);
 impl_error_wrapper!(Utf8Error, core::str::Utf8Error);
@@ -19,7 +19,13 @@ impl_error_wrapper!(DieselResultError, diesel::result::Error);
 impl_error_wrapper!(TomlSerError, toml::ser::Error);
 impl_error_wrapper!(TomlDeError, toml::de::Error);
 impl_error_wrapper!(StdIoError, std::io::Error);
-impl_error_wrapper!(PeckLibError, peck_lib::error::Error);
+impl_error_wrapper!(PKCS1Error, pkcs1::Error);
+impl_error_wrapper!(SignatureError, signature::Error);
+impl_error_wrapper!(DecodeError, base64::DecodeError);
+impl_error_wrapper!(InvalidHeaderValue, axum::http::header::InvalidHeaderValue);
+
+//impl_error_wrapper!(AeadError, aead::Error);
+
 //impl_error_wrapper!(EmailAddressError, email_address::EmailAddress);
 
 #[derive(Error, Debug)]
@@ -28,6 +34,8 @@ pub enum AuthFlowError {
     Expired,
     #[error("Invalid")]
     Invalid,
+    #[error("IncorrectType")]
+    IncorrectType,
 }
 
 #[derive(Error, Debug)]
@@ -48,10 +56,16 @@ pub enum AuthenticationError {
     AccountSetupIncomplete,
     #[error("UserNotFound({0})")]
     UserNotFound(Uuid),
+    #[error("SerialisingLoginCredentials({0})")]
+    SerialisingLoginCredentials(SerdeError),
+    #[error("EncryptLoginCredentials({0})")]
+    EncryptLoginCredentials(RSAError),
+    #[error("Disabled")]
+    Disabled,
     /* #[error("")]
     ErrorGetting2FACodeFromSecret,
-    #[error("Argon2ValidationError({0})")]
-    Argon2ValidationError(String),
+    #[error("Argon2Validation({0})")]
+    Argon2Validation(String),
     #[error("")]
     Invalid2FASecret,
     #[error("")]
@@ -67,37 +81,48 @@ pub enum TokenError {
     #[error("DataSerialisation({0})")]
     DataSerialisation(#[from] SerdeError),
     #[error("DataEncryption({0})")]
-    DataEncryption(#[from] OpenSSLError),
+    DataEncryption(String),
+    #[error("EncryptLoginCredentials({0})")]
+    EncryptLoginCredentials(RSAError),
     #[error("HeaderSerialisation({0})")]
     HeaderSerialisation(SerdeError),
     #[error("HeaderDeserialisation({0})")]
     HeaderDeserialisation(SerdeError),
-    #[error("CreateSigner({0})")]
+    #[error("ConvertingBytesToSignature({0})")]
+    ConvertingBytesToSignature(SignatureError),
+    #[error("DecodeURLSafeBase64({0})")]
+    DecodeURLSafeBase64(DecodeError),
+    /* #[error("SerialiseLoginCredentials({0})")]
+    SerialiseLoginCredentials(SerdeError), */
+
+    /* #[error("CreateSigner({0})")]
     CreateSigner(OpenSSLError),
     #[error("FeedSigner({0})")]
     FeedSigner(OpenSSLError),
     #[error("FinaliseSignature({0})")]
-    FinaliseSignature(OpenSSLError),
+    FinaliseSignature(OpenSSLError), */
     #[error("InvalidFormatForDecoding")]
     InvalidFormatForDecoding,
+    #[error("Base64Decode({0})")]
+    Base64Decode(Base64DecodeError),
     #[error("HeaderBase64Decode({0})")]
     HeaderBase64Decode(Base64DecodeError),
-    #[error("Feedverifier({0})")]
-    FeedVerifier(OpenSSLError),
+    /* #[error("Feedverifier({0})")]
+    FeedVerifier(OpenSSLError), */
     #[error("HeaderUnexpectedAlgorithm")]
     HeadedUnexpectedAlgorithm,
     #[error("SignatureBase64Decode({0})")]
     SignatureBase64Decode(Base64DecodeError),
-    #[error("CreateVerifier({0})")]
-    CreateVerifier(OpenSSLError),
-    #[error("FinaliseVerifier({0})")]
-    FinaliseVerifier(OpenSSLError),
-    #[error("SignatureVerificationFailed")]
-    SignatureVerificationFailed,
+    /* #[error("CreateVerifier({0})")]
+    CreateVerifier(OpenSSLError), */
+    /* #[error("FinaliseVerifier({0})")]
+    FinaliseVerifier(RSAError), */
+    #[error("SignatureVerificationFailed({0})")]
+    SignatureVerificationFailed(SignatureError),
     #[error("PayloadBase64Decode({0})")]
     PayloadBase64Decode(Base64DecodeError),
     #[error("DataDecryption({0})")]
-    DataDecryption(OpenSSLError),
+    DataDecryption(String),
     #[error("DataBytesToString({0})")]
     DataBytesToString(FromUtf8Error),
     #[error("DataDeserialisation({0})")]
@@ -110,7 +135,7 @@ pub enum TokenError {
 
 #[derive(Error, Debug)]
 pub enum LoginError {
-    #[error("KeysDontMatch")]
+    #[error("HeaderKeysDontMatch")]
     HeaderKeysDontMatch,
 }
 
@@ -146,36 +171,36 @@ pub enum AccountSetupError {
 
 #[derive(Error, Debug)]
 pub enum StartupError {
-    #[error("InvalidOrigin({0})")]
-    InvalidOrigin(#[from] InvalidHeaderValue),
+    #[error("InvalidOrigin({0}: {1})")]
+    InvalidOrigin(InvalidHeaderValue, String),
 }
 
 #[derive(Error, Debug)]
 pub enum EncryptionError {
-    #[error("GeneratingRSABase({0})")]
-    GeneratingRSABase(OpenSSLError),
+    /* #[error("GeneratingRSABase({0})")]
+    GeneratingRSABase(OpenSSLError), */
     #[error("GeneratingRSAPrivate({0})")]
-    GeneratingRSAPrivate(OpenSSLError),
-    #[error("GeneratingRSAPublic({0})")]
-    GeneratingRSAPublic(OpenSSLError),
-    #[error("GeneratingRSAPublicPEM({0})")]
-    GeneratingRSAPublicPEM(OpenSSLError),
+    GeneratingRSAPrivate(RSAError),
+    /* #[error("GeneratingRSAPublic({0})")]
+    GeneratingRSAPublic(RSAError), */
+    /* #[error("GeneratingRSAPublicPEM({0})")]
+    GeneratingRSAPublicPEM(OpenSSLError), */
     #[error("RSAPrivateConversion({0})")]
-    RSAPrivateConversion(OpenSSLError),
-    #[error("DataDecryption({0})")]
-    DataDecryption(OpenSSLError),
+    RSAPrivateConversion(RSAError),
+    /* #[error("DataDecryption({0})")]
+    DataDecryption(OpenSSLError), */
     #[error("PublicToPEMConversion({0})")]
-    PublicToPEMConversion(OpenSSLError),
+    PublicToPEMConversion(PKCS1Error),
     #[error("PublicPEMBytesToString({0})")]
     PublicPEMBytesToString(Utf8Error),
-    #[error("ConvertSigningPrivateToPEMPKCS8({0})")]
-    ConvertSigningPrivateToPEMPKCS8(OpenSSLError),
-    #[error("ConvertPrivateToPEMPKCS8({0})")]
-    ConvertPrivateToPEMPKCS8(OpenSSLError),
-    #[error("ConvertSigningPublicKeyToPEM({0})")]
-    ConvertSigningPublicKeyToPEM(OpenSSLError),
-    #[error("ConvertPublicKeyToPEM({0})")]
-    ConvertPublicKeyToPEM(OpenSSLError),
+    #[error("ConvertSigningPrivateKeyToPEMPKCS1({0})")]
+    ConvertSigningPrivateKeyToPEMPKCS1(PKCS1Error),
+    #[error("ConvertPrivateKeyToPEMPKCS1({0})")]
+    ConvertPrivateKeyToPEMPKCS1(PKCS1Error),
+    #[error("ConvertSigningPublicKeyToPEMPKCS1({0})")]
+    ConvertSigningPublicKeyToPEMPKCS1(PKCS1Error),
+    #[error("ConvertPublicKeyToPEMPKCS1({0})")]
+    ConvertPublicKeyToPEMPKCS1(PKCS1Error),
     #[error("ConvertModelToTOML({0})")]
     ConvertModelToTOML(TomlSerError),
     #[error("WriteTOMLToFile({0})")]
@@ -184,14 +209,14 @@ pub enum EncryptionError {
     ReadTOMLFromFile(StdIoError),
     #[error("ConvertTOMLToModel({0})")]
     ConvertTOMLToModel(TomlDeError),
-    #[error("SigningPrivateKeyFromPEM({0})")]
-    SigningPrivateKeyFromPEM(OpenSSLError),
-    #[error("SigningPublicKeyFromPEM({0})")]
-    SigningPublicKeyFromPEM(OpenSSLError),
-    #[error("PrivateKeyFromPEM({0})")]
-    PrivateKeyFromPEM(OpenSSLError),
-    #[error("PublicKeyFromPEM({0})")]
-    PublicKeyFromPEM(OpenSSLError),
+    #[error("SigningPrivateKeyFromPEMPKCS1({0})")]
+    SigningPrivateKeyFromPEMPKCS1(PKCS1Error),
+    #[error("SigningPublicKeyFromPEMPKCS1({0})")]
+    SigningPublicKeyFromPEMPKCS1(PKCS1Error),
+    #[error("PrivateKeyFromPEMPKCS1({0})")]
+    PrivateKeyFromPEMPKCS1(PKCS1Error),
+    #[error("PublicKeyFromPEMPKCS1({0})")]
+    PublicKeyFromPEMPKCS1(PKCS1Error),
 }
 
 #[derive(Error, Debug)]
@@ -269,10 +294,16 @@ pub enum WriteTokenValidationError {
     WriteUIDNotMatchReadUID,
 }
 
-impl From<peck_lib::error::Error> for Error {
-    fn from(value: peck_lib::error::Error) -> Self {
-        Error::PeckLib(PeckLibError(value))
+impl From<UIDAuthorityError> for Error {
+    fn from(value: UIDAuthorityError) -> Self {
+        Error::UIDAuthority(value)
     }
+}
+
+#[derive(Error, Debug)]
+pub enum IdentityError {
+    #[error("MissingExpiry")]
+    MissingExpiry,
 }
 
 #[derive(Error, Debug)]
@@ -311,6 +342,8 @@ pub enum Error {
     UserFromModel(UserFromModelError),
     #[error("Database({0})")]
     Database(DatabaseError),
-    #[error("PeckLib({0})")]
-    PeckLib(PeckLibError),
+    #[error("UIDAuthority({0})")]
+    UIDAuthority(UIDAuthorityError),
+    #[error("Identity({0})")]
+    Identity(IdentityError),
 }

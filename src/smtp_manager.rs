@@ -20,9 +20,9 @@ impl SmtpManager {
         let sender_address: Mailbox = match sender_address.parse() {
             Ok(sender_address) => sender_address,
             Err(err) => {
-                return Err(
-                    Error::Smtp(SmtpError::ServerAddressParse(SmtpAddressError(err))).into(),
-                )
+                return Err(Error::Smtp(SmtpError::ServerAddressParse(
+                    SmtpAddressError(err),
+                )))
             }
         };
         let smtp_transport_builder: SmtpTransportBuilder = match SmtpTransport::relay(&server) {
@@ -67,9 +67,9 @@ impl SmtpManager {
             Err(err) => return Err(Error::Smtp(SmtpError::MessageBuilder(LettreError(err)))),
         };
 
-        return match self.mailer.send(&message) {
+        match self.mailer.send(&message) {
             Ok(response) => Ok(response),
             Err(err) => Err(Error::Smtp(SmtpError::MessageSend(SmtpTransportError(err)))),
-        };
+        }
     }
 }

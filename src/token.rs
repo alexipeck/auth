@@ -1,340 +1,322 @@
-use std::fmt;
-
-use crate::error::Error;
-use crate::error::{Base64DecodeError, FromUtf8Error, OpenSSLError, SerdeError, TokenError};
+use crate::error::{Base64DecodeError, DecodeError, Error, SignatureError, TokenError};
+use aead::{AeadCore, Nonce, OsRng};
+use aes_gcm::aead::Aead;
+use aes_gcm::Aes256Gcm;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chrono::{DateTime, Duration, Utc};
-use openssl::{
-    hash::MessageDigest,
-    pkey::{PKey, Private, Public},
-    sign::{Signer, Verifier},
-    symm::{decrypt, encrypt, Cipher},
-};
+use cipher::generic_array::GenericArray;
+use cipher::KeyInit;
+use peck_lib::auth::error::SerdeError;
 use peck_lib::datetime::r#trait::Expired;
 use peck_lib::datetime::serde::datetime_utc_option;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use rsa::pkcs1v15::{Signature, SigningKey, VerifyingKey};
+use rsa::sha2::Sha256;
+use rsa::signature::SignerMut;
+use rsa::signature::Verifier;
+use serde::de::{self, DeserializeOwned, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt;
 use tracing::warn;
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Algorithm {
-    RSA,
-    RSASHA256,
-}
-
-impl fmt::Display for Algorithm {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::RSA => "RSA",
-                Self::RSASHA256 => "RSA-SHA256",
-            }
-        )
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-struct Header {
-    alg: Algorithm,
-}
-
-impl Header {
-    pub fn signed_encrypted() -> Self {
-        Self {
-            alg: Algorithm::RSASHA256,
-        }
-    }
-    pub fn signed() -> Self {
-        Self {
-            alg: Algorithm::RSA,
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
-struct TokenWrapper<T> {
+struct TokenInnerInner<T> {
     pub data: T,
     #[serde(with = "datetime_utc_option")]
     pub expiry: Option<DateTime<Utc>>,
-    pub _salt: Uuid,
+    pub _salt: Option<Uuid>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Token {}
+pub struct NonceAes256Gcm(Nonce<Aes256Gcm>);
+
+impl Serialize for NonceAes256Gcm {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&URL_SAFE_NO_PAD.encode(self.0.as_slice()))
+    }
+}
+
+impl<'de> Deserialize<'de> for NonceAes256Gcm {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct BinaryDataVisitor;
+
+        impl<'de> Visitor<'de> for BinaryDataVisitor {
+            type Value = NonceAes256Gcm;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a base64 encoded string representing Nonce<Aes256Gcm>")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                match URL_SAFE_NO_PAD.decode(value) {
+                    Ok(bytes) => Ok(NonceAes256Gcm(*Nonce::<Aes256Gcm>::from_slice(&bytes))),
+                    Err(e) => Err(E::custom(format!("base64 decode error: {}", e))),
+                }
+            }
+        }
+
+        deserializer.deserialize_str(BinaryDataVisitor)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum TokenInner {
+    ///serialised_data
+    RSASigned(String),
+    ///(encrypted_data_base64, nonce/iv): (String, Nonce<Aes256Gcm>)
+    RSASignedSHA256Encrypted(String, NonceAes256Gcm),
+}
+
+#[derive(Debug, Clone)]
+pub struct SignatureWrapper(Signature);
+
+impl Serialize for SignatureWrapper {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let signature_bytes: Box<[u8]> = self.0.to_owned().into();
+
+        serializer.serialize_str(&URL_SAFE_NO_PAD.encode(&signature_bytes))
+    }
+}
+
+impl<'de> Deserialize<'de> for SignatureWrapper {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct BinaryDataVisitor;
+
+        impl<'de> Visitor<'de> for BinaryDataVisitor {
+            type Value = SignatureWrapper;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str(
+                    "a base64 encoded string representing rsa::pkcs1v15::signature::Signature",
+                )
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                match URL_SAFE_NO_PAD.decode(value) {
+                    Ok(bytes) => match Signature::try_from(bytes.as_slice()) {
+                        Ok(signature) => Ok(SignatureWrapper(signature)),
+                        Err(err) => Err(E::custom(Error::Token(
+                            TokenError::ConvertingBytesToSignature(SignatureError(err)),
+                        ))),
+                    },
+                    Err(e) => Err(E::custom(format!("base64 decode error: {}", e))),
+                }
+            }
+        }
+
+        deserializer.deserialize_str(BinaryDataVisitor)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Token {
+    /* pub alg: Algorithm, */
+    pub inner: TokenInner,
+    pub signature: SignatureWrapper,
+}
 
 impl Token {
-    pub fn create_signed_expiry<T: Serialize + DeserializeOwned>(
+    pub fn from_str(value: &str) -> Result<Self, Error> {
+        let serialised_data = match URL_SAFE_NO_PAD.decode(value) {
+            Ok(token) => token,
+            Err(err) => {
+                return Err(Error::Token(TokenError::DecodeURLSafeBase64(DecodeError(
+                    err,
+                ))))
+            }
+        };
+        match serde_json::from_slice::<Self>(&serialised_data) {
+            Ok(token) => Ok(token),
+            Err(err) => Err(Error::Token(TokenError::DataDeserialisation(SerdeError(
+                err,
+            )))),
+        }
+    }
+    pub fn to_string(&self) -> Result<String, Error> {
+        let serialised_data = match serde_json::to_vec(self) {
+            Ok(serialised_data) => serialised_data,
+            Err(err) => return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err)))),
+        };
+        Ok(URL_SAFE_NO_PAD.encode(serialised_data))
+    }
+    pub fn create_signed<T: Serialize + DeserializeOwned>(
         data: T,
-        expiry: DateTime<Utc>,
-        private_signing_key: &PKey<Private>,
+        expiry: Option<DateTime<Utc>>,
+        mut signing_key: SigningKey<Sha256>,
+        salted: bool,
     ) -> Result<String, Error> {
         let serialised_data_base64: String = {
-            let data: TokenWrapper<T> = TokenWrapper {
+            let data: TokenInnerInner<T> = TokenInnerInner {
                 data,
-                expiry: Some(expiry),
-                _salt: Uuid::new_v4(),
+                expiry,
+                _salt: if salted { Some(Uuid::new_v4()) } else { None },
             };
             let serialised_data: String = match serde_json::to_string(&data) {
                 Ok(serialised_data) => serialised_data,
                 Err(err) => {
                     warn!("{}", err);
-                    return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err))).into());
+                    return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err))));
                 }
             };
-            URL_SAFE_NO_PAD.encode(&serialised_data)
+            URL_SAFE_NO_PAD.encode(serialised_data)
         };
-        let header_base64 = {
-            let header_str = match serde_json::to_string(&Header::signed()) {
-                Ok(header_str) => header_str,
-                Err(err) => {
-                    warn!("{}", err);
-                    return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err))).into());
-                }
-            };
-            URL_SAFE_NO_PAD.encode(&header_str)
-        };
-        let signature_base64 = {
-            let mut signer = match Signer::new(MessageDigest::sha256(), private_signing_key) {
-                Ok(signer) => signer,
-                Err(err) => {
-                    warn!("{}", err);
-                    return Err(Error::Token(TokenError::CreateSigner(OpenSSLError(err))));
-                }
-            };
-            if let Err(err) = signer.update(header_base64.as_bytes()) {
-                warn!("{}", err);
-                return Err(Error::Token(TokenError::FeedSigner(OpenSSLError(err))));
-            }
-            if let Err(err) = signer.update(serialised_data_base64.as_bytes()) {
-                warn!("{}", err);
-                return Err(Error::Token(TokenError::FeedSigner(OpenSSLError(err))));
-            }
-            let signature = match signer.sign_to_vec() {
-                Ok(signature) => signature,
-                Err(err) => {
-                    warn!("{}", err);
-                    return Err(Error::Token(TokenError::FinaliseSignature(OpenSSLError(
-                        err,
-                    ))));
-                }
-            };
-            URL_SAFE_NO_PAD.encode(&signature)
-        };
-        Ok(format!(
-            "{}.{}.{}",
-            header_base64, serialised_data_base64, signature_base64
-        ))
+        let signature: Signature = signing_key.sign(serialised_data_base64.as_bytes());
+        Self {
+            inner: TokenInner::RSASigned(serialised_data_base64),
+            signature: SignatureWrapper(signature),
+        }
+        .to_string()
     }
     pub fn create_signed_and_encrypted_lifetime<T: Serialize + DeserializeOwned>(
         data: T,
         lifetime: Duration,
-        private_signing_key: &PKey<Private>,
+        signing_key: SigningKey<Sha256>,
         symmetric_key: &[u8],
-        iv: &[u8],
+        salted: bool,
     ) -> Result<String, Error> {
         let expiry: DateTime<Utc> = Utc::now() + lifetime;
-        Self::create_signed_and_encrypted(
-            data,
-            Some(expiry),
-            private_signing_key,
-            symmetric_key,
-            iv,
-        )
+        Self::create_signed_and_encrypted(data, Some(expiry), signing_key, symmetric_key, salted)
     }
+
     pub fn create_signed_and_encrypted<T: Serialize + DeserializeOwned>(
         data: T,
         expiry: Option<DateTime<Utc>>,
-        private_signing_key: &PKey<Private>,
+        mut signing_key: SigningKey<Sha256>,
         symmetric_key: &[u8],
-        iv: &[u8],
+        salted: bool,
     ) -> Result<String, Error> {
+        let nonce: Nonce<Aes256Gcm> = Aes256Gcm::generate_nonce(&mut OsRng);
         let encrypted_data_base64: String = {
-            let data: TokenWrapper<T> = TokenWrapper {
+            let data: TokenInnerInner<T> = TokenInnerInner {
                 data,
                 expiry,
-                _salt: Uuid::new_v4(),
+                _salt: if salted { Some(Uuid::new_v4()) } else { None },
             };
             let serialised_data: String = match serde_json::to_string(&data) {
                 Ok(serialised_data) => serialised_data,
                 Err(err) => {
                     warn!("{}", err);
-                    return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err))).into());
+                    return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err))));
                 }
             };
-            let encrypted_data: Vec<u8> = match encrypt(
-                Cipher::aes_256_cbc(),
-                symmetric_key,
-                Some(iv),
-                serialised_data.as_bytes(),
-            ) {
+
+            let cipher = Aes256Gcm::new(GenericArray::from_slice(&symmetric_key));
+            let encrypted_data: Vec<u8> = match cipher.encrypt(&nonce, serialised_data.as_bytes()) {
                 Ok(encrypted_data) => encrypted_data,
                 Err(err) => {
                     warn!("{}", err);
-                    return Err(Error::Token(TokenError::DataEncryption(OpenSSLError(err))).into());
+                    return Err(Error::Token(TokenError::DataEncryption(err.to_string())));
                 }
             };
-            URL_SAFE_NO_PAD.encode(&encrypted_data)
+            URL_SAFE_NO_PAD.encode(encrypted_data)
         };
-        let header_base64: String = {
-            let header_str: String = match serde_json::to_string(&Header::signed_encrypted()) {
-                Ok(header_str) => header_str,
-                Err(err) => {
-                    warn!("{}", err);
-                    return Err(Error::Token(TokenError::DataSerialisation(SerdeError(err))).into());
-                }
-            };
-            URL_SAFE_NO_PAD.encode(&header_str)
-        };
-        let signature_base64: String = {
-            let mut signer = match Signer::new(MessageDigest::sha256(), private_signing_key) {
-                Ok(signer) => signer,
-                Err(err) => {
-                    warn!("{}", err);
-                    return Err(Error::Token(TokenError::CreateSigner(OpenSSLError(err))).into());
-                }
-            };
-            if let Err(err) = signer.update(header_base64.as_bytes()) {
-                warn!("{}", err);
-                return Err(Error::Token(TokenError::FeedSigner(OpenSSLError(err))));
-            }
-            if let Err(err) = signer.update(encrypted_data_base64.as_bytes()) {
-                warn!("{}", err);
-                return Err(Error::Token(TokenError::FeedSigner(OpenSSLError(err))));
-            }
-            let signature: Vec<u8> = match signer.sign_to_vec() {
-                Ok(signature) => signature,
-                Err(err) => {
-                    warn!("{}", err);
-                    return Err(Error::Token(TokenError::FinaliseSignature(OpenSSLError(
-                        err,
-                    ))));
-                }
-            };
-            URL_SAFE_NO_PAD.encode(&signature)
-        };
-        Ok(format!(
-            "{}.{}.{}",
-            header_base64, encrypted_data_base64, signature_base64
-        ))
+        let signature = signing_key.sign(encrypted_data_base64.as_bytes());
+        Self {
+            inner: TokenInner::RSASignedSHA256Encrypted(
+                encrypted_data_base64,
+                NonceAes256Gcm(nonce),
+            ),
+            signature: SignatureWrapper(signature),
+        }
+        .to_string()
     }
+
     pub fn verify_and_decrypt<T: Serialize + DeserializeOwned>(
-        token: &str,
-        public_signing_key: &PKey<Public>,
+        &self,
+        verifying_key: VerifyingKey<Sha256>,
         symmetric_key: &[u8],
-        iv: &[u8],
     ) -> Result<(T, Option<DateTime<Utc>>), Error> {
-        let parts: Vec<&str> = token.split('.').collect();
-        if parts.len() != 3 {
-            println!("{:?}", parts);
-            return Err(Error::Token(TokenError::InvalidFormatForDecoding));
-        }
-
-        //Header validation
-        {
-            let header_str_bytes: Vec<u8> = match URL_SAFE_NO_PAD.decode(parts[0]) {
-                Ok(header_str_bytes) => header_str_bytes,
-                Err(err) => {
-                    return Err(Error::Token(TokenError::HeaderBase64Decode(
-                        Base64DecodeError(err),
-                    )))
-                }
-            };
-            let header: Header = match serde_json::from_slice(&header_str_bytes) {
-                Ok(header) => header,
-                Err(err) => {
-                    return Err(Error::Token(TokenError::HeaderDeserialisation(SerdeError(
-                        err,
-                    ))))
-                }
-            };
-            if header.alg != Algorithm::RSASHA256 {
-                return Err(Error::Token(TokenError::HeadedUnexpectedAlgorithm));
-            }
-            drop(header);
-            drop(header_str_bytes);
-        }
-
-        //Signature verification
-        {
-            let signature_bytes: Vec<u8> = match URL_SAFE_NO_PAD.decode(parts[2]) {
-                Ok(signature_bytes) => signature_bytes,
-                Err(err) => {
-                    return Err(Error::Token(TokenError::SignatureBase64Decode(
-                        Base64DecodeError(err),
-                    )))
-                }
-            };
-            let mut verifier: Verifier<'_> =
-                match Verifier::new(MessageDigest::sha256(), public_signing_key) {
-                    Ok(verifier) => verifier,
+        let cipher = Aes256Gcm::new(GenericArray::from_slice(&symmetric_key));
+        let deserialised_data_struct = match &self.inner {
+            TokenInner::RSASigned(serialised_data_base64) => {
+                if let Err(err) =
+                    verifying_key.verify(serialised_data_base64.as_bytes(), &self.signature.0)
+                {
+                    return Err(Error::Token(TokenError::SignatureVerificationFailed(
+                        SignatureError(err),
+                    )));
+                };
+                let serialised_data = match URL_SAFE_NO_PAD.decode(serialised_data_base64) {
+                    Ok(encrypted_data) => encrypted_data,
                     Err(err) => {
-                        return Err(
-                            Error::Token(TokenError::CreateVerifier(OpenSSLError(err))).into()
-                        )
+                        return Err(Error::Token(TokenError::Base64Decode(Base64DecodeError(
+                            err,
+                        ))))
                     }
                 };
-            if let Err(err) = verifier.update(parts[0].as_bytes()) {
-                return Err(Error::Token(TokenError::FeedVerifier(OpenSSLError(err))).into());
+                let deserialised_data_struct: TokenInnerInner<T> =
+                    match serde_json::from_slice::<TokenInnerInner<T>>(&serialised_data) {
+                        Ok(decrypted_data_struct) => decrypted_data_struct,
+                        Err(err) => {
+                            return Err(Error::Token(TokenError::DataDeserialisation(SerdeError(
+                                err,
+                            ))))
+                        }
+                    };
+                deserialised_data_struct
             }
-            if let Err(err) = verifier.update(parts[1].as_bytes()) {
-                return Err(Error::Token(TokenError::FeedVerifier(OpenSSLError(err))).into());
-            }
-            let verified: bool = match verifier.verify(&signature_bytes) {
-                Ok(verified) => verified,
-                Err(err) => {
-                    return Err(
-                        Error::Token(TokenError::FinaliseVerifier(OpenSSLError(err))).into(),
-                    )
-                }
-            };
-            if !verified {
-                return Err(Error::Token(TokenError::SignatureVerificationFailed));
-            }
-        }
-
-        let encrypted_payload: Vec<u8> = match URL_SAFE_NO_PAD.decode(parts[1]) {
-            Ok(encrypted_payload) => encrypted_payload,
-            Err(err) => {
-                return Err(Error::Token(TokenError::PayloadBase64Decode(
-                    Base64DecodeError(err),
-                )))
+            TokenInner::RSASignedSHA256Encrypted(encrypted_data_base64, nonce) => {
+                if let Err(err) =
+                    verifying_key.verify(encrypted_data_base64.as_bytes(), &self.signature.0)
+                {
+                    return Err(Error::Token(TokenError::SignatureVerificationFailed(
+                        SignatureError(err),
+                    )));
+                };
+                let encrypted_data = match URL_SAFE_NO_PAD.decode(encrypted_data_base64) {
+                    Ok(encrypted_data) => encrypted_data,
+                    Err(err) => {
+                        return Err(Error::Token(TokenError::Base64Decode(Base64DecodeError(
+                            err,
+                        ))))
+                    }
+                };
+                let decrypted_data: Vec<u8> = match cipher.decrypt(&nonce.0, &*encrypted_data) {
+                    Ok(decrypted_data) => decrypted_data,
+                    Err(err) => {
+                        warn!("{}", err);
+                        return Err(Error::Token(TokenError::DataDecryption(err.to_string())));
+                    }
+                };
+                let deserialised_data_struct: TokenInnerInner<T> =
+                    match serde_json::from_slice::<TokenInnerInner<T>>(&decrypted_data) {
+                        Ok(decrypted_data_struct) => decrypted_data_struct,
+                        Err(err) => {
+                            return Err(Error::Token(TokenError::DataDeserialisation(SerdeError(
+                                err,
+                            ))))
+                        }
+                    };
+                deserialised_data_struct
             }
         };
-
-        let cipher: Cipher = Cipher::aes_256_cbc();
-        let decrypted_data: Vec<u8> =
-            match decrypt(cipher, symmetric_key, Some(iv), &encrypted_payload) {
-                Ok(decrypted_data) => decrypted_data,
-                Err(err) => {
-                    return Err(Error::Token(TokenError::DataDecryption(OpenSSLError(err))).into())
-                }
-            };
-
-        let decrypted_data_str: String = match String::from_utf8(decrypted_data) {
-            Ok(decrypted_data_str) => decrypted_data_str,
-            Err(err) => {
-                return Err(Error::Token(TokenError::DataBytesToString(FromUtf8Error(err))).into())
-            }
-        };
-
-        let decrypted_data_struct: TokenWrapper<T> =
-            match serde_json::from_str::<TokenWrapper<T>>(&decrypted_data_str) {
-                Ok(decrypted_data_struct) => decrypted_data_struct,
-                Err(err) => {
-                    return Err(
-                        Error::Token(TokenError::DataDeserialisation(SerdeError(err))).into(),
-                    )
-                }
-            };
-
-        if let Some(expiry) = decrypted_data_struct.expiry {
+        if let Some(expiry) = deserialised_data_struct.expiry {
             if expiry.expired() {
                 return Err(Error::Token(TokenError::Expired));
             }
         }
 
-        Ok((decrypted_data_struct.data, decrypted_data_struct.expiry))
+        Ok((
+            deserialised_data_struct.data,
+            deserialised_data_struct.expiry,
+        ))
     }
 }

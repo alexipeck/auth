@@ -1,23 +1,28 @@
 use crate::{
     auth_manager::AuthManager,
-    base::debug_route,
     error::{AuthServerBuildError, Error},
     routes::{
         authenticated::{get_write_token_route, refresh_read_token_route},
-        login::{init_login_flow_route, login_with_credentials_route},
+        debug_route,
+        login::{
+            init_identity_login_flow_route, init_login_flow_route, login_with_credentials_route,
+            login_with_identity_route,
+        },
         setup::{setup_user_account_route, validate_invite_token_route},
     },
+    DEFAULT_INVITE_LIFETIME_SECONDS, DEFAULT_MAX_SESSION_LIFETIME_SECONDS,
+    DEFAULT_READ_LIFETIME_SECONDS, DEFAULT_WRITE_LIFETIME_SECONDS,
 };
 use axum::{
     http::{
-        header::{AUTHORIZATION, CONTENT_TYPE, COOKIE},
+        header::{ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE, COOKIE, ORIGIN},
         Method,
     },
     routing::{get, post},
     Extension, Router,
 };
 use core::fmt;
-use peck_lib::uid_authority::UIDAuthority;
+use peck_lib::uid::authority::UIDAuthority;
 use std::{
     net::SocketAddr,
     sync::{
@@ -59,6 +64,7 @@ pub enum RequiredProperties {
     SMTPPassword,
     DatabaseUrl,
     Port,
+    CookieDomain,
 }
 
 impl fmt::Display for RequiredProperties {
@@ -75,6 +81,7 @@ impl fmt::Display for RequiredProperties {
                 Self::SMTPPassword => "SMTPPassword",
                 Self::DatabaseUrl => "DatabaseUrl",
                 Self::Port => "Port",
+                Self::CookieDomain => "CookieDomain",
             }
         )
     }
@@ -83,9 +90,14 @@ impl fmt::Display for RequiredProperties {
 async fn start_server(auth_server: Arc<AuthServer>) {
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])
-        .allow_headers(vec![CONTENT_TYPE, AUTHORIZATION, COOKIE])
-        /* .allow_origin(AllowOrigin::exact("https://clouduam.com".parse().unwrap())) */
-        .allow_origin(AllowOrigin::exact(
+        .allow_headers(vec![
+            CONTENT_TYPE,
+            AUTHORIZATION,
+            COOKIE,
+            ACCESS_CONTROL_ALLOW_ORIGIN,
+            ORIGIN,
+        ])
+        .allow_origin(AllowOrigin::list(
             auth_server
                 .auth_manager
                 .config
@@ -95,29 +107,33 @@ async fn start_server(auth_server: Arc<AuthServer>) {
         .allow_credentials(true);
 
     let app = Router::new()
-        .route("/login/init-login-flow", get(init_login_flow_route))
-        .route("/debug", post(debug_route))
-        .route("/login/credentials", post(login_with_credentials_route))
-        .route("/setup/init-setup-flow", post(validate_invite_token_route))
-        .route("/setup/credentials", post(setup_user_account_route))
-        .route(
-            "/authenticated/refresh-read-token",
-            get(refresh_read_token_route),
+        .nest(
+            "/auth",
+            Router::new()
+                .route("/login/init-login-flow", get(init_login_flow_route))
+                .route("/login/init-identity-flow", get(init_identity_login_flow_route))
+                .route("/debug", post(debug_route))
+                .route("/login/credentials", post(login_with_credentials_route))
+                .route("/login/identity", post(login_with_identity_route))
+                .route("/setup/init-setup-flow", post(validate_invite_token_route))
+                .route("/setup/credentials", post(setup_user_account_route))
+                .route(
+                    "/authenticated/refresh-read-token",
+                    get(refresh_read_token_route),
+                )
+                .route(
+                    "/authenticated/get-write-token",
+                    post(get_write_token_route),
+                )
+                .layer(cors.to_owned())
+                .layer(Extension(auth_server.auth_manager.to_owned())),
         )
-        .route(
-            "/authenticated/get-write-token",
-            post(get_write_token_route),
-        )
-        /* .route(
-            "/authenticated/twofa-for-write-token",
-            post(get_new_write_token_route),
-        ) */
-        /* .route("/logout", post(logout)) */
-        /* .layer(TraceLayer::new_for_http()) */
         .layer(cors)
-        .layer(Extension(auth_server.auth_manager.to_owned()));
+        .layer(Extension(auth_server.auth_manager.to_owned()))
+        /* .route("/logout", post(logout)) */
+        /* .layer(TraceLayer::new_for_http()) */;
 
-    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], auth_server.auth_manager.port));
+    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], auth_server.auth_manager.port));
     let listener = TcpListener::bind(addr).await.unwrap();
     info!("REST endpoint listening on {}", addr);
 
@@ -131,7 +147,6 @@ async fn start_server(auth_server: Arc<AuthServer>) {
     }
 }
 
-#[derive(Default)]
 pub struct Builder {
     //required
     cookie_name_base: Option<String>,
@@ -141,11 +156,12 @@ pub struct Builder {
     smtp_username: Option<String>,
     smtp_password: Option<String>,
     port: Option<u16>,
+    cookie_domain: Option<String>,
+    database_url: Option<String>,
 
     //optional
     stop: Option<Arc<AtomicBool>>,
     stop_notify: Option<Arc<Notify>>,
-    database_url: Option<String>,
     uid_authority: Option<Arc<UIDAuthority>>,
     read_lifetime_seconds: Option<i64>,
     write_lifetime_seconds: Option<i64>,
@@ -154,6 +170,30 @@ pub struct Builder {
     login_flow_lifetime_seconds: Option<i64>,
     invite_flow_lifetime_seconds: Option<i64>,
     invite_lifetime_seconds: Option<i64>,
+}
+
+impl Default for Builder {
+    fn default() -> Self {
+        Self {
+            cookie_name: None,
+            allowed_origins: Vec::new(),
+            smtp_server: None,
+            smtp_sender_address: None,
+            smtp_username: None,
+            smtp_password: None,
+            port: None,
+            cookie_domain: None,
+            database_url: None,
+            stop: None,
+            stop_notify: None,
+            uid_authority: None,
+            persistent_encryption_keys_path: None,
+            read_lifetime_seconds: DEFAULT_READ_LIFETIME_SECONDS,
+            write_lifetime_seconds: DEFAULT_WRITE_LIFETIME_SECONDS,
+            max_session_lifetime_seconds: DEFAULT_MAX_SESSION_LIFETIME_SECONDS,
+            invite_lifetime_seconds: DEFAULT_INVITE_LIFETIME_SECONDS,
+        }
+    }
 }
 
 impl Builder {
@@ -203,7 +243,7 @@ impl Builder {
     }
 
     pub fn allowed_origin(mut self, allowed_origin: String) -> Self {
-        self.allowed_origin = Some(allowed_origin);
+        self.allowed_origins.push(allowed_origin);
         self
     }
 
@@ -247,12 +287,37 @@ impl Builder {
         self
     }
 
+    pub fn cookie_domain(mut self, cookie_domain: String) -> Self {
+        self.cookie_domain = Some(cookie_domain);
+        self
+    }
+
+    pub fn read_lifetime_seconds(mut self, lifetime: i64) -> Self {
+        self.read_lifetime_seconds = lifetime;
+        self
+    }
+
+    pub fn write_lifetime_seconds(mut self, lifetime: i64) -> Self {
+        self.write_lifetime_seconds = lifetime;
+        self
+    }
+
+    pub fn max_session_lifetime_seconds(mut self, lifetime: i64) -> Self {
+        self.max_session_lifetime_seconds = lifetime;
+        self
+    }
+
+    pub fn invite_lifetime_seconds(mut self, lifetime: i64) -> Self {
+        self.invite_lifetime_seconds = lifetime;
+        self
+    }
+
     pub async fn start_server(self) -> Result<Arc<AuthServer>, Error> {
         let mut missing_properties: Vec<RequiredProperties> = Vec::new();
         if self.cookie_name_base.is_none() {
             missing_properties.push(RequiredProperties::CookieName);
         }
-        if self.allowed_origin.is_none() {
+        if self.allowed_origins.is_empty() {
             missing_properties.push(RequiredProperties::AllowedOrigin);
         }
         if self.smtp_server.is_none() {
@@ -273,15 +338,15 @@ impl Builder {
         if self.port.is_none() {
             missing_properties.push(RequiredProperties::Port);
         }
-        if !missing_properties.is_empty() {
-            return Err(
-                Error::AuthServerBuild(AuthServerBuildError::MissingProperties(format!(
-                    "{:?}",
-                    missing_properties
-                )))
-                .into(),
-            );
+        if self.cookie_domain.is_none() {
+            missing_properties.push(RequiredProperties::CookieDomain);
         }
+        if !missing_properties.is_empty() {
+            return Err(Error::AuthServerBuild(
+                AuthServerBuildError::MissingProperties(format!("{:?}", missing_properties)),
+            ));
+        }
+
         let auth_manager: AuthManager = AuthManager::new(
             self.cookie_name_base.unwrap(),
             self.allowed_origin.unwrap(),
@@ -291,6 +356,7 @@ impl Builder {
             self.smtp_password.unwrap(),
             self.database_url.unwrap(),
             self.port.unwrap(),
+            self.cookie_domain.unwrap(),
             self.uid_authority,
             self.read_lifetime_seconds,
             self.write_lifetime_seconds,

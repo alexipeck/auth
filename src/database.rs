@@ -65,11 +65,8 @@ pub fn get_all_users(connection: &mut SqliteConnection) -> Result<HashMap<Uuid, 
             }
             Ok(users)
         }
-        Err(err) => Err(
-            Error::Database(DatabaseError::LoadingUserModelsFromDatabase(
-                DieselResultError(err),
-            ))
-            .into(),
-        ),
+        Err(err) => Err(Error::Database(
+            DatabaseError::LoadingUserModelsFromDatabase(DieselResultError(err)),
+        )),
     }
 }
