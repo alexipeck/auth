@@ -131,6 +131,24 @@ pub async fn login_with_credentials_route(
                     SET_COOKIE,
                     CookieBuilder::new(
                         format!(
+                            "{base}_login_flow",
+                            base = auth_manager.config.get_cookie_name_base()
+                        ),
+                        "",
+                    )
+                    .http_only(true)
+                    .secure(true)
+                    .domain(&auth_manager.cookie_domain)
+                    .path("/")
+                    .same_site(SameSite::Strict)
+                    .expires(OffsetDateTime::UNIX_EPOCH)
+                    .build()
+                    .to_string(),
+                ),
+                (
+                    SET_COOKIE,
+                    CookieBuilder::new(
+                        format!(
                             "{base}_read",
                             base = auth_manager.config.get_cookie_name_base()
                         ),
