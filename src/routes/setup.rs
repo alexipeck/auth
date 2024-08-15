@@ -7,7 +7,6 @@ use crate::{
     },
 };
 use axum::{
-    extract::ConnectInfo,
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Extension, Json,
@@ -16,7 +15,7 @@ use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 use google_authenticator::GoogleAuthenticator;
 use peck_lib::{auth::token_pair::TokenPair, datetime::r#trait::Expired};
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 use tracing::warn;
 
 async fn validate_invite_token(
@@ -75,7 +74,6 @@ async fn validate_invite_token(
 }
 
 pub async fn validate_invite_token_route(
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
     axum::response::Json(invite_token): axum::response::Json<InviteToken>,
@@ -157,7 +155,6 @@ async fn setup_user_account(
 }
 
 pub async fn setup_user_account_route(
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
     axum::response::Json(user_setup): axum::response::Json<UserSetup>,

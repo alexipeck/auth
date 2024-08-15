@@ -4,7 +4,6 @@ use crate::{
     flows::user_login::SixDigitString,
 };
 use axum::{
-    extract::ConnectInfo,
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Extension, Json,
@@ -14,16 +13,23 @@ use axum_extra::{
     TypedHeader,
 };
 use serde::{Deserialize, Serialize};
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 use tracing::warn;
 
 pub async fn refresh_read_token_route(
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
+    TypedHeader(cookies): TypedHeader<Cookie>,
     headers: HeaderMap,
-    TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,
 ) -> impl IntoResponse {
-    match auth_manager.refresh_read_token(authorisation.token(), &headers) {
+    let read_token = cookies.get(&format!(
+        "{base}_read",
+        base = auth_manager.config.get_cookie_name_base()
+    ));
+
+    if read_token.is_none() {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    match auth_manager.refresh_read_token(read_token.unwrap(), &headers) {
         Ok(token_pair) => (StatusCode::OK, Json(token_pair)).into_response(),
         Err(err) => {
             //TODO: Split out into actual correct errors
@@ -65,7 +71,6 @@ pub async fn get_user_profile_route(
 }
 
 pub async fn get_write_token_route(
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
     TypedHeader(authorisation): TypedHeader<Authorization<Bearer>>,

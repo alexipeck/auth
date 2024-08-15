@@ -6,7 +6,6 @@ use crate::{
 };
 use axum::{
     body::Body,
-    extract::ConnectInfo,
     http::{header::SET_COOKIE, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Extension, Json,
@@ -15,7 +14,7 @@ use axum_extra::{headers::Cookie, TypedHeader};
 use chrono::Duration;
 use cookie::{time::OffsetDateTime, CookieBuilder, SameSite};
 use peck_lib::auth::token_pair::TokenPair;
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 use tracing::{info, warn};
 
 fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result<String, Error> {
@@ -30,7 +29,6 @@ fn init_login_flow(headers: HeaderMap, auth_manager: Arc<AuthManager>) -> Result
 }
 
 pub async fn init_login_flow_route(
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
@@ -102,7 +100,6 @@ async fn login_with_credentials(
 }
 
 pub async fn login_with_credentials_route(
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     TypedHeader(cookies): TypedHeader<Cookie>,
     headers: HeaderMap,
