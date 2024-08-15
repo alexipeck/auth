@@ -129,7 +129,6 @@ async fn start_server(auth_server: Arc<AuthServer>) {
         )
         .layer(cors)
         .layer(Extension(auth_server.auth_manager.to_owned()))
-        /* .route("/logout", post(logout)) */
         /* .layer(TraceLayer::new_for_http()) */;
 
     let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], auth_server.auth_manager.port));

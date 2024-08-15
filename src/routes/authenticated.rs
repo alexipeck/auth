@@ -58,7 +58,7 @@ pub async fn get_user_profile_route(
         Ok(user_profile) => user_profile,
         Err(err) => {
             warn!("{err}");
-            return StatusCode::BAD_REQUEST.into_response();
+            return StatusCode::UNAUTHORIZED.into_response();
         }
     };
     (StatusCode::OK, Json(user_profile)).into_response()

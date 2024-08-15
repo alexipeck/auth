@@ -260,7 +260,33 @@ pub async fn login_with_credentials_route(
 
 pub async fn logout_route(
     Extension(auth_manager): Extension<Arc<AuthManager>>,
+    TypedHeader(cookies): TypedHeader<Cookie>,
 ) -> impl IntoResponse {
+    let read_token = cookies.get(&format!(
+        "{base}_read",
+        base = auth_manager.config.get_cookie_name_base()
+    ));
+
+    if let Some(read_token) = read_token {
+        match auth_manager
+            .validate_read_token_for_user_profile(read_token)
+            .await
+        {
+            Ok(user_profile) => {
+                info!(
+                    "User logged out: ({}, {}, {})",
+                    user_profile.display_name, user_profile.email, user_profile.user_uid
+                );
+            }
+            Err(err) => {
+                warn!("{err}");
+                info!("Unknown user contacted logout route");
+            }
+        }
+    } else {
+        info!("Unknown user contacted logout route");
+    }
+
     let mut builder = Response::builder().status(StatusCode::OK);
 
     builder = builder.header(
@@ -286,7 +312,45 @@ pub async fn logout_route(
         SET_COOKIE,
         CookieBuilder::new(
             format!(
+                "{base}_write_expiry",
+                base = auth_manager.config.get_cookie_name_base()
+            ),
+            "",
+        )
+        .http_only(true)
+        .secure(true)
+        .domain(&auth_manager.cookie_domain)
+        .path("/")
+        .same_site(SameSite::Strict)
+        .expires(OffsetDateTime::UNIX_EPOCH)
+        .build()
+        .to_string(),
+    );
+
+    builder = builder.header(
+        SET_COOKIE,
+        CookieBuilder::new(
+            format!(
                 "{base}_read",
+                base = auth_manager.config.get_cookie_name_base()
+            ),
+            "",
+        )
+        .http_only(true)
+        .secure(true)
+        .domain(&auth_manager.cookie_domain)
+        .path("/")
+        .same_site(SameSite::Strict)
+        .expires(OffsetDateTime::UNIX_EPOCH)
+        .build()
+        .to_string(),
+    );
+
+    builder = builder.header(
+        SET_COOKIE,
+        CookieBuilder::new(
+            format!(
+                "{base}_read_expiry",
                 base = auth_manager.config.get_cookie_name_base()
             ),
             "",
