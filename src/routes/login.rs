@@ -5,9 +5,10 @@ use crate::{
     user::UserProfile,
 };
 use axum::{
+    body::Body,
     extract::ConnectInfo,
     http::{header::SET_COOKIE, HeaderMap, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     Extension, Json,
 };
 use axum_extra::{headers::Cookie, TypedHeader};
@@ -105,186 +106,113 @@ pub async fn login_with_credentials_route(
     Extension(auth_manager): Extension<Arc<AuthManager>>,
     TypedHeader(cookies): TypedHeader<Cookie>,
     headers: HeaderMap,
-    axum::response::Json(login_credentials): axum::response::Json<LoginCredentials>,
+    axum::Json(login_credentials): axum::Json<LoginCredentials>,
 ) -> impl IntoResponse {
     let login_flow_key = cookies.get(&format!(
         "{base}_login_flow",
         base = auth_manager.config.get_cookie_name_base()
     ));
-    let login_flow_key = if let Some(login_flow_key) = login_flow_key {
-        login_flow_key
-    } else {
+
+    if login_flow_key.is_none() {
         return StatusCode::UNAUTHORIZED.into_response();
-    };
+    }
+
     match login_with_credentials(
         login_credentials,
-        login_flow_key,
+        login_flow_key.unwrap(),
         headers,
-        auth_manager.to_owned(),
+        auth_manager.clone(),
     )
     .await
     {
-        Ok(((read, write), user_profile)) => (
-            StatusCode::OK,
-            [
-                (
-                    SET_COOKIE,
-                    CookieBuilder::new(
-                        format!(
-                            "{base}_read",
-                            base = auth_manager.config.get_cookie_name_base()
-                        ),
-                        read.token,
-                    )
-                    .http_only(true)
-                    .secure(true)
-                    .domain(&auth_manager.cookie_domain)
-                    .path("/")
-                    .same_site(SameSite::Strict)
-                    .max_age(cookie::time::Duration::seconds(
-                        auth_manager.config.read_lifetime_seconds - 5,
-                    ))
-                    .build()
-                    .to_string(),
-                ),
-                (
-                    SET_COOKIE,
-                    CookieBuilder::new(
-                        format!(
-                            "{base}_read_expiry",
-                            base = auth_manager.config.get_cookie_name_base()
-                        ),
-                        read.expiry.to_rfc3339(),
-                    )
-                    .http_only(false)
-                    .secure(true)
-                    .domain(&auth_manager.cookie_domain)
-                    .path("/")
-                    .same_site(SameSite::Strict)
-                    .max_age(cookie::time::Duration::seconds(
-                        auth_manager.config.read_lifetime_seconds - 5,
-                    ))
-                    .build()
-                    .to_string(),
-                ),
-                (
-                    SET_COOKIE,
-                    CookieBuilder::new(
-                        format!(
-                            "{base}_write",
-                            base = auth_manager.config.get_cookie_name_base()
-                        ),
-                        write.token,
-                    )
-                    .http_only(true)
-                    .secure(true)
-                    .domain(&auth_manager.cookie_domain)
-                    .path("/")
-                    .same_site(SameSite::Strict)
-                    .max_age(cookie::time::Duration::seconds(
-                        auth_manager.config.write_lifetime_seconds - 5,
-                    ))
-                    .build()
-                    .to_string(),
-                ),
-                (
-                    SET_COOKIE,
-                    CookieBuilder::new(
-                        format!(
-                            "{base}_write_expiry",
-                            base = auth_manager.config.get_cookie_name_base()
-                        ),
-                        write.expiry.to_rfc3339(),
-                    )
-                    .http_only(false)
-                    .secure(true)
-                    .domain(&auth_manager.cookie_domain)
-                    .path("/")
-                    .same_site(SameSite::Strict)
-                    .max_age(cookie::time::Duration::seconds(
-                        auth_manager.config.write_lifetime_seconds - 5,
-                    ))
-                    .build()
-                    .to_string(),
-                ),
-                (
-                    SET_COOKIE,
-                    CookieBuilder::new(
-                        format!(
-                            "{base}_login_flow",
-                            base = auth_manager.config.get_cookie_name_base()
-                        ),
-                        "",
-                    )
-                    .http_only(true)
-                    .secure(true)
-                    .domain(&auth_manager.cookie_domain)
-                    .path("/")
-                    .same_site(SameSite::Strict)
-                    .expires(OffsetDateTime::UNIX_EPOCH)
-                    .build()
-                    .to_string(),
-                ),
-            ],
-            Json(user_profile),
-        )
-            .into_response(),
-        Err(err) => {
-            warn!("{}", err);
-            match err {
-                Error::Authentication(
-                    AuthenticationError::IncorrectCredentials
-                    | AuthenticationError::Incorrect2FACode,
-                ) => StatusCode::UNAUTHORIZED.into_response(),
-                _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-            }
-        }
-    }
-}
+        Ok(((read, write), user_profile)) => {
+            let mut builder = Response::builder().status(StatusCode::OK);
 
-pub async fn logout_route(
-    Extension(auth_manager): Extension<Arc<AuthManager>>,
-) -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        [
-            (
-                SET_COOKIE,
-                CookieBuilder::new(
-                    format!(
-                        "{base}_write",
-                        base = auth_manager.config.get_cookie_name_base()
-                    ),
-                    "",
-                )
-                .http_only(true)
-                .secure(true)
-                .domain(&auth_manager.cookie_domain)
-                .path("/")
-                .same_site(SameSite::Strict)
-                .expires(OffsetDateTime::UNIX_EPOCH)
-                .build()
-                .to_string(),
-            ),
-            (
+            builder = builder.header(
                 SET_COOKIE,
                 CookieBuilder::new(
                     format!(
                         "{base}_read",
                         base = auth_manager.config.get_cookie_name_base()
                     ),
-                    "",
+                    read.token,
                 )
                 .http_only(true)
                 .secure(true)
                 .domain(&auth_manager.cookie_domain)
                 .path("/")
                 .same_site(SameSite::Strict)
-                .expires(OffsetDateTime::UNIX_EPOCH)
+                .max_age(cookie::time::Duration::seconds(
+                    auth_manager.config.read_lifetime_seconds - 5,
+                ))
                 .build()
                 .to_string(),
-            ),
-            (
+            );
+
+            builder = builder.header(
+                SET_COOKIE,
+                CookieBuilder::new(
+                    format!(
+                        "{base}_read_expiry",
+                        base = auth_manager.config.get_cookie_name_base()
+                    ),
+                    read.expiry.to_rfc3339(),
+                )
+                .http_only(false)
+                .secure(true)
+                .domain(&auth_manager.cookie_domain)
+                .path("/")
+                .same_site(SameSite::Strict)
+                .max_age(cookie::time::Duration::seconds(
+                    auth_manager.config.read_lifetime_seconds - 5,
+                ))
+                .build()
+                .to_string(),
+            );
+
+            builder = builder.header(
+                SET_COOKIE,
+                CookieBuilder::new(
+                    format!(
+                        "{base}_write",
+                        base = auth_manager.config.get_cookie_name_base()
+                    ),
+                    write.token,
+                )
+                .http_only(true)
+                .secure(true)
+                .domain(&auth_manager.cookie_domain)
+                .path("/")
+                .same_site(SameSite::Strict)
+                .max_age(cookie::time::Duration::seconds(
+                    auth_manager.config.write_lifetime_seconds - 5,
+                ))
+                .build()
+                .to_string(),
+            );
+
+            builder = builder.header(
+                SET_COOKIE,
+                CookieBuilder::new(
+                    format!(
+                        "{base}_write_expiry",
+                        base = auth_manager.config.get_cookie_name_base()
+                    ),
+                    write.expiry.to_rfc3339(),
+                )
+                .http_only(false)
+                .secure(true)
+                .domain(&auth_manager.cookie_domain)
+                .path("/")
+                .same_site(SameSite::Strict)
+                .max_age(cookie::time::Duration::seconds(
+                    auth_manager.config.write_lifetime_seconds - 5,
+                ))
+                .build()
+                .to_string(),
+            );
+
+            builder = builder.header(
                 SET_COOKIE,
                 CookieBuilder::new(
                     format!(
@@ -301,8 +229,102 @@ pub async fn logout_route(
                 .expires(OffsetDateTime::UNIX_EPOCH)
                 .build()
                 .to_string(),
+            );
+
+            match builder.body(Body::from(match serde_json::to_string(&user_profile) {
+                Ok(t) => t,
+                Err(err) => {
+                    warn!("{err}");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            })) {
+                Ok(response) => response,
+                Err(err) => {
+                    warn!("{err}");
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
+        }
+        Err(err) => {
+            warn!("{}", err);
+            match err {
+                Error::Authentication(
+                    AuthenticationError::IncorrectCredentials
+                    | AuthenticationError::Incorrect2FACode,
+                ) => StatusCode::UNAUTHORIZED.into_response(),
+                _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            }
+        }
+    }
+}
+
+pub async fn logout_route(
+    Extension(auth_manager): Extension<Arc<AuthManager>>,
+) -> impl IntoResponse {
+    let mut builder = Response::builder().status(StatusCode::OK);
+
+    builder = builder.header(
+        SET_COOKIE,
+        CookieBuilder::new(
+            format!(
+                "{base}_write",
+                base = auth_manager.config.get_cookie_name_base()
             ),
-        ],
-    )
-        .into_response()
+            "",
+        )
+        .http_only(true)
+        .secure(true)
+        .domain(&auth_manager.cookie_domain)
+        .path("/")
+        .same_site(SameSite::Strict)
+        .expires(OffsetDateTime::UNIX_EPOCH)
+        .build()
+        .to_string(),
+    );
+
+    builder = builder.header(
+        SET_COOKIE,
+        CookieBuilder::new(
+            format!(
+                "{base}_read",
+                base = auth_manager.config.get_cookie_name_base()
+            ),
+            "",
+        )
+        .http_only(true)
+        .secure(true)
+        .domain(&auth_manager.cookie_domain)
+        .path("/")
+        .same_site(SameSite::Strict)
+        .expires(OffsetDateTime::UNIX_EPOCH)
+        .build()
+        .to_string(),
+    );
+
+    builder = builder.header(
+        SET_COOKIE,
+        CookieBuilder::new(
+            format!(
+                "{base}_login_flow",
+                base = auth_manager.config.get_cookie_name_base()
+            ),
+            "",
+        )
+        .http_only(true)
+        .secure(true)
+        .domain(&auth_manager.cookie_domain)
+        .path("/")
+        .same_site(SameSite::Strict)
+        .expires(OffsetDateTime::UNIX_EPOCH)
+        .build()
+        .to_string(),
+    );
+
+    match builder.body(Body::empty()) {
+        Ok(response) => response,
+        Err(err) => {
+            warn!("{err}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
