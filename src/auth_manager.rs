@@ -4,14 +4,14 @@ use crate::{
     database::{establish_connection, get_all_users, save_user, update_user},
     error::{
         AccountSetupError, AuthFlowError, AuthServerBuildError, AuthenticationError, Error,
-        IdentityError, LoginError, ReadTokenAsRefreshTokenError, ReadTokenValidationError,
-        StartupError, TokenError, WriteTokenValidationError,
+        LoginError, ReadTokenAsRefreshTokenError, ReadTokenValidationError, StartupError,
+        TokenError, WriteTokenValidationError,
     },
     filter_headers_into_btreeset,
-    flows::user_setup::UserInvite,
+    flows::{user_login::SixDigitString, user_setup::UserInvite},
     smtp_manager::SmtpManager,
     token::Token,
-    user::{IdentityCookie, User, UserProfile, UserSafe},
+    user::{User, UserProfile, UserSafe},
     user_session::{ReadInternal, TokenMode, UserToken},
 };
 use axum::http::{HeaderMap, HeaderValue};
@@ -29,7 +29,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::info;
 use uuid::Uuid;
 
 pub struct Regexes {
@@ -83,14 +83,14 @@ impl Default for Regexes {
 pub struct Config {
     cookie_name_base: String,
     allowed_origins: Vec<HeaderValue>,
-    read_lifetime_seconds: i64,
-    write_lifetime_seconds: i64,
+    pub(crate) read_lifetime_seconds: i64,
+    pub(crate) write_lifetime_seconds: i64,
     refresh_in_last_x_seconds: i64,
     max_session_lifetime_seconds: i64,
     max_read_iterations: u32,
-    pub login_flow_lifetime_seconds: i64,
-    pub invite_flow_lifetime_seconds: i64,
-    pub invite_lifetime_seconds: i64,
+    pub(crate) login_flow_lifetime_seconds: i64,
+    pub(crate) invite_flow_lifetime_seconds: i64,
+    pub(crate) invite_lifetime_seconds: i64,
 }
 
 impl Config {
@@ -235,7 +235,7 @@ impl AuthManager {
         let email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>> = Arc::new(RwLock::new(
             users
                 .iter()
-                .map(|(user_id, user)| (user.get_email().to_owned(), *user_id))
+                .map(|(user_uid, user)| (user.get_email().to_owned(), *user_uid))
                 .collect::<HashMap<EmailAddress, Uuid>>(),
         ));
         let users: Arc<RwLock<HashMap<Uuid, User>>> = Arc::new(RwLock::new(users));
@@ -288,6 +288,27 @@ impl AuthManager {
 }
 
 impl AuthManager {
+    pub async fn create_read_write_from_user_uid(
+        &self,
+        user_uid: Uuid,
+        headers: &HeaderMap,
+    ) -> Result<((TokenPair, TokenPair), DateTime<Utc>), Error> {
+        let session_uid = self.generate_session_uid().await;
+        let (read, write, latest_expiry): (TokenPair, TokenPair, DateTime<Utc>) =
+            self.generate_read_and_write_token(headers, session_uid, user_uid)?;
+        Ok(((read, write), latest_expiry))
+    }
+    pub async fn create_aligned_read_from_user_uid(
+        &self,
+        user_uid: Uuid,
+        headers: &HeaderMap,
+        expiry: DateTime<Utc>,
+    ) -> Result<TokenPair, Error> {
+        let session_uid = self.generate_session_uid().await;
+        let read: TokenPair =
+            self.generate_aligned_read_token(headers, session_uid, user_uid, expiry)?;
+        Ok(read)
+    }
     pub fn get_read_lifetime_seconds(&self) -> i64 {
         self.config.read_lifetime_seconds.to_owned()
     }
@@ -324,8 +345,8 @@ impl AuthManager {
         self.create_signed_and_encrypted_token_with_expiry(flow, expiry)
     }
 
-    pub async fn user_setup_incomplete(&self, user_id: &Uuid) -> Option<bool> {
-        if let Some(user) = self.users.read().await.get(user_id) {
+    pub async fn user_setup_incomplete(&self, user_uid: &Uuid) -> Option<bool> {
+        if let Some(user) = self.users.read().await.get(user_uid) {
             return Some(user.incomplete());
         }
         None
@@ -351,53 +372,73 @@ impl AuthManager {
         false
     }
 
-    pub fn generate_identity(
+    pub fn generate_aligned_read_token(
         &self,
         headers: &HeaderMap,
-        user_id: &Uuid,
+        session_uid: Uuid,
+        user_uid: Uuid,
         expiry: DateTime<Utc>,
-    ) -> Result<IdentityCookie, Error> {
-        #[cfg(feature = "debug-logging")]
-        tracing::debug!("Headers for generating identity {:?}", headers);
-        let token = self
-            .setup_flow_with_expiry(&headers, FlowType::Identity, expiry, false, *user_id)?
-            .token;
-        Ok(IdentityCookie {
-            name: self.config.cookie_name_base.to_owned(),
-            token,
+    ) -> Result<TokenPair, Error> {
+        let headers: BTreeMap<String, HeaderValue> =
+            filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
+        self.create_signed_and_encrypted_token_with_expiry(
+            UserToken::new(
+                TokenMode::Read(Box::new(ReadInternal::new(
+                    headers.hash_debug(),
+                    session_uid,
+                    Duration::seconds(self.config.max_session_lifetime_seconds),
+                    self.config.max_read_iterations,
+                ))),
+                user_uid,
+            ),
             expiry,
-        })
+        )
     }
 
-    pub async fn validate_identity(
+    pub fn generate_read_and_write_token(
         &self,
-        identity: &str,
-        key: &str,
         headers: &HeaderMap,
-    ) -> Result<(UserProfile, DateTime<Utc>), Error> {
-        //TODO: Validate that key and identity headers are the same
-        #[cfg(feature = "debug-logging")]
-        tracing::debug!("Headers for validating identity {:?}", headers);
-        let _ = match self.verify_flow::<Option<bool>>(&key, &headers, &FlowType::Login, true) {
-            Ok(_) => {}
-            Err(err) => {
-                warn!("{err}");
-                return Err(err);
-            }
-        };
-        let (user_id, expiry) =
-            match self.verify_flow::<Uuid>(identity, headers, &FlowType::Identity, false) {
-                Ok(t) => t,
-                Err(err) => {
-                    warn!("{err}");
-                    return Err(err);
-                }
-            };
-        let expiry = match expiry {
+        session_uid: Uuid,
+        user_uid: Uuid,
+    ) -> Result<(TokenPair, TokenPair, DateTime<Utc>), Error> {
+        let headers: BTreeMap<String, HeaderValue> =
+            filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
+        let read_internal: ReadInternal = ReadInternal::new(
+            headers.hash_debug(),
+            session_uid,
+            Duration::seconds(self.config.max_session_lifetime_seconds),
+            self.config.max_read_iterations,
+        );
+        let latest_expiry: DateTime<Utc> = read_internal.get_latest_expiry().to_owned();
+        let write_internal: crate::user_session::WriteInternal =
+            read_internal.generate_write_internal();
+        let read_token: TokenPair = self.create_signed_and_encrypted_token_with_lifetime(
+            UserToken::new(TokenMode::Read(Box::new(read_internal)), user_uid),
+            Duration::seconds(self.config.read_lifetime_seconds),
+        )?;
+        let write_token: TokenPair = self.create_signed_and_encrypted_token_with_lifetime(
+            UserToken::new(TokenMode::Write(Box::new(write_internal)), user_uid),
+            Duration::seconds(self.config.write_lifetime_seconds),
+        )?;
+        Ok((read_token, write_token, latest_expiry))
+    }
+
+    pub async fn validate_read_token_for_user_profile(
+        &self,
+        read_token: &str,
+    ) -> Result<UserProfile, Error> {
+        let (user_token, expiry) = self.verify_and_decrypt::<UserToken>(read_token)?;
+        let existing_expiry = match expiry {
             Some(expiry) => expiry,
-            None => return Err(Error::Identity(IdentityError::MissingExpiry)),
+            None => return Err(Error::Token(TokenError::MissingExpiry)),
         };
-        let user_profile = match self.users.read().await.get(&user_id) {
+        if existing_expiry.expired() {
+            return Err(Error::ReadTokenAsRefreshToken(
+                ReadTokenAsRefreshTokenError::Expired,
+            ));
+        }
+        let user_uid = user_token.get_user_uid();
+        match self.users.read().await.get(user_uid) {
             Some(user) => {
                 if user.incomplete() {
                     return Err(Error::Authentication(
@@ -407,70 +448,20 @@ impl AuthManager {
                 if user.disabled() {
                     return Err(Error::Authentication(AuthenticationError::Disabled));
                 }
-                user.to_user_profile()
+                Ok(user.to_user_profile())
             }
-            None => {
-                return Err(Error::Authentication(AuthenticationError::UserNotFound(
-                    user_id,
-                )))
-            }
-        };
-        Ok((user_profile, expiry))
+            None => Err(Error::Authentication(AuthenticationError::UserNotFound(
+                *user_uid,
+            ))),
+        }
     }
 
-    pub fn generate_aligned_read_token(
+    pub fn refresh_read_token(
         &self,
+        read_token: &str,
         headers: &HeaderMap,
-        session_id: Uuid,
-        user_id: Uuid,
-        expiry: DateTime<Utc>,
     ) -> Result<TokenPair, Error> {
-        let headers: BTreeMap<String, HeaderValue> =
-            filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
-        self.create_signed_and_encrypted_token_with_expiry(
-            UserToken::new(
-                TokenMode::Read(Box::new(ReadInternal::new(
-                    headers.hash_debug(),
-                    session_id,
-                    Duration::seconds(self.config.max_session_lifetime_seconds),
-                    self.config.max_read_iterations,
-                ))),
-                user_id,
-            ),
-            expiry,
-        )
-    }
-
-    pub fn generate_read_and_write_token(
-        &self,
-        headers: &HeaderMap,
-        session_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<(TokenPair, TokenPair, DateTime<Utc>), Error> {
-        let headers: BTreeMap<String, HeaderValue> =
-            filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
-        let read_internal: ReadInternal = ReadInternal::new(
-            headers.hash_debug(),
-            session_id,
-            Duration::seconds(self.config.max_session_lifetime_seconds),
-            self.config.max_read_iterations,
-        );
-        let latest_expiry: DateTime<Utc> = read_internal.get_latest_expiry().to_owned();
-        let write_internal: crate::user_session::WriteInternal =
-            read_internal.generate_write_internal();
-        let read_token: TokenPair = self.create_signed_and_encrypted_token_with_lifetime(
-            UserToken::new(TokenMode::Read(Box::new(read_internal)), user_id),
-            Duration::seconds(self.config.read_lifetime_seconds),
-        )?;
-        let write_token: TokenPair = self.create_signed_and_encrypted_token_with_lifetime(
-            UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
-            Duration::seconds(self.config.write_lifetime_seconds),
-        )?;
-        Ok((read_token, write_token, latest_expiry))
-    }
-
-    pub fn refresh_read_token(&self, token: &str, headers: &HeaderMap) -> Result<TokenPair, Error> {
-        let (user_token, existing_expiry) = self.verify_and_decrypt::<UserToken>(token)?;
+        let (user_token, existing_expiry) = self.verify_and_decrypt::<UserToken>(read_token)?;
         let existing_expiry = match existing_expiry {
             Some(expiry) => expiry,
             None => return Err(Error::Token(TokenError::MissingExpiry)),
@@ -486,7 +477,7 @@ impl AuthManager {
                 ReadTokenAsRefreshTokenError::NotUsedWithinValidRefreshPeriod,
             ));
         }
-        let (user_id, mut token_mode) = user_token.extract();
+        let (user_uid, mut token_mode) = user_token.extract();
         let expiry: DateTime<Utc>;
         let headers: BTreeMap<String, HeaderValue> =
             filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
@@ -498,34 +489,34 @@ impl AuthManager {
             ));
         };
 
-        let user_token: UserToken = UserToken::new(token_mode, user_id);
+        let user_token: UserToken = UserToken::new(token_mode, user_uid);
 
-        let t = self.create_signed_and_encrypted_token_with_expiry(user_token, expiry);
-        if t.is_ok() {
-            info!("Read token refreshed for user {}", user_id);
+        let result = self.create_signed_and_encrypted_token_with_expiry(user_token, expiry);
+        if result.is_ok() {
+            info!("Read token refreshed for user {}", user_uid);
         }
-        t
+        result
         //TODO: Add requirement for minimum number of expected headers to be present to prevent clients sending minimal headers
     }
 
     pub async fn generate_write_token(
         &self,
         read_token: &str,
-        two_fa_code: &[u8; 6],
+        two_fa_code: &SixDigitString,
         headers: &HeaderMap,
     ) -> Result<TokenPair, Error> {
-        let (user_id, read_internal) = self.validate_read_token(read_token, headers)?;
-        if let Some(user) = self.users.read().await.get(&user_id) {
+        let (user_uid, read_internal) = self.validate_read_token(read_token, headers)?;
+        if let Some(user) = self.users.read().await.get(&user_uid) {
             user.validate_two_fa_code(two_fa_code)?;
         } else {
             return Err(Error::Authentication(AuthenticationError::UserNotFound(
-                user_id,
+                user_uid,
             )));
         }
         let write_internal: crate::user_session::WriteInternal =
             read_internal.generate_write_internal();
         self.create_signed_and_encrypted_token_with_lifetime(
-            UserToken::new(TokenMode::Write(Box::new(write_internal)), user_id),
+            UserToken::new(TokenMode::Write(Box::new(write_internal)), user_uid),
             Duration::seconds(self.config.write_lifetime_seconds),
         )
         //TODO: Add requirement for minimum number of expected headers to be present to prevent clients sending minimal headers
@@ -570,16 +561,16 @@ impl AuthManager {
             .read()
             .await
             .iter()
-            .map(|(user_id, user)| (*user_id, user.to_safe()))
+            .map(|(user_uid, user)| (*user_uid, user.to_safe()))
             .collect::<HashMap<Uuid, UserSafe>>()
     }
 
-    pub async fn get_user_id_from_email(&self, email: &EmailAddress) -> Option<Uuid> {
+    pub async fn get_user_uid_from_email(&self, email: &EmailAddress) -> Option<Uuid> {
         self.email_to_id_registry.read().await.get(email).cloned()
     }
 
     ///generates UUIDv4, if a UIDAuthority is available, this is guaranteed unique, otherwise is just generated using Uuid::new_v4()
-    pub async fn generate_session_id(&self) -> Uuid {
+    pub async fn generate_session_uid(&self) -> Uuid {
         if let Some(uid_authority) = self.uid_authority.as_ref() {
             return uid_authority.generate_uid().await;
         }
@@ -642,9 +633,9 @@ impl AuthManager {
     }
 
     pub async fn invite_user(&self, email: EmailAddress) -> Result<Uuid, Error> {
-        let user_id: Uuid = self.generate_user_uid().await;
+        let user_uid: Uuid = self.generate_user_uid().await;
         let user: User = User::new(
-            user_id,
+            user_uid,
             String::new(),
             email.to_owned(),
             String::new(),
@@ -652,23 +643,23 @@ impl AuthManager {
             true,
         );
         let token_pair = self.create_signed_and_encrypted_token_with_lifetime(
-            UserInvite::new(email.to_owned(), user_id),
+            UserInvite::new(email.to_owned(), user_uid),
             Duration::minutes(self.config.invite_lifetime_seconds),
         )?;
         if let Err(err) = save_user(&mut establish_connection(&self.database_url), &user) {
             panic!("{}", err);
         }
-        let _ = self.users.write().await.insert(user_id, user);
+        let _ = self.users.write().await.insert(user_uid, user);
         self.email_to_id_registry
             .write()
             .await
-            .insert(email.to_owned(), user_id);
+            .insert(email.to_owned(), user_uid);
         self.smtp_manager.send_email_to_recipient(
             email.into(),
             "Invite Link".into(),
             format!("{}/invite?token={}", &self.cookie_domain, token_pair.token), //https://clouduam.com
         )?;
-        Ok(user_id)
+        Ok(user_uid)
     }
 
     pub async fn setup_user(
@@ -678,15 +669,15 @@ impl AuthManager {
         display_name: String,
         two_fa_client_secret: String,
     ) -> Result<(), Error> {
-        let user_id: Uuid = match self.get_user_id_from_email(email).await {
-            Some(user_id) => user_id,
+        let user_uid: Uuid = match self.get_user_uid_from_email(email).await {
+            Some(user_uid) => user_uid,
             None => {
                 return Err(Error::AccountSetup(
                     AccountSetupError::CouldntGetUserIDFromEmail,
                 ))
             }
         };
-        return if let Some(user) = self.users.write().await.get_mut(&user_id) {
+        return if let Some(user) = self.users.write().await.get_mut(&user_uid) {
             user.setup_user(password, display_name, two_fa_client_secret)?;
             if let Err(err) = update_user(&mut establish_connection(&self.database_url), user) {
                 panic!("{}", err);
@@ -694,7 +685,7 @@ impl AuthManager {
             Ok(())
         } else {
             Err(Error::AccountSetup(AccountSetupError::UserNotFound(
-                user_id,
+                user_uid,
             )))
         };
     }
@@ -707,7 +698,7 @@ impl AuthManager {
         #[cfg(feature = "debug-logging")]
         tracing::debug!("Headers for validating read token {:?}", headers);
         let (user_token, _) = self.verify_and_decrypt::<UserToken>(token)?;
-        let (user_id, token_mode) = user_token.extract();
+        let (user_uid, token_mode) = user_token.extract();
         if let TokenMode::Read(read_mode) = token_mode {
             let headers =
                 filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
@@ -716,7 +707,7 @@ impl AuthManager {
                     ReadTokenValidationError::InvalidHeaders,
                 ));
             }
-            Ok((user_id, *read_mode))
+            Ok((user_uid, *read_mode))
         } else {
             Err(Error::ReadTokenValidation(
                 ReadTokenValidationError::NotReadToken,
@@ -734,10 +725,10 @@ impl AuthManager {
             }
             (t[0], t[1])
         };
-        let (read_user_id, read_internal) = self.validate_read_token(read_token, headers)?;
+        let (read_user_uid, read_internal) = self.validate_read_token(read_token, headers)?;
         let (user_token, _) = self.verify_and_decrypt::<UserToken>(write_token)?;
-        let (write_user_id, token_mode) = user_token.extract();
-        if read_user_id != write_user_id {
+        let (write_user_uid, token_mode) = user_token.extract();
+        if read_user_uid != write_user_uid {
             return Err(Error::WriteTokenValidation(
                 WriteTokenValidationError::UserIDNotMatchCorrespondingRead,
             ));
@@ -750,7 +741,7 @@ impl AuthManager {
                     WriteTokenValidationError::InvalidHeaders,
                 ));
             }
-            if write_mode.get_session_id() != read_internal.get_session_id() {
+            if write_mode.get_session_uid() != read_internal.get_session_uid() {
                 return Err(Error::WriteTokenValidation(
                     WriteTokenValidationError::WriteUIDNotMatchReadUID,
                 ));
@@ -760,17 +751,17 @@ impl AuthManager {
                 WriteTokenValidationError::NotWriteToken,
             ));
         }
-        Ok(write_user_id)
+        Ok(write_user_uid)
     }
 
     pub async fn validate_user_credentials(
         &self,
         email: &EmailAddress,
         password: &String,
-        two_fa_code: &[u8; 6],
+        two_fa_code: &SixDigitString,
     ) -> Result<UserProfile, Error> {
         match self.email_to_id_registry.read().await.get(email) {
-            Some(user_id) => match self.users.read().await.get(user_id) {
+            Some(user_uid) => match self.users.read().await.get(user_uid) {
                 Some(user) => {
                     if user.incomplete() {
                         return Err(Error::Authentication(

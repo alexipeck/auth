@@ -27,7 +27,7 @@ async fn validate_invite_token(
     let (user_invite_instance, expiry) = {
         let (user_invite, expiry) = auth_manager.verify_and_decrypt::<UserInvite>(invite_token)?;
         let user_setup_incomplete: Option<bool> = auth_manager
-            .user_setup_incomplete(user_invite.get_user_id())
+            .user_setup_incomplete(user_invite.get_user_uid())
             .await;
         if user_setup_incomplete.is_none() {
             return Err(Error::AccountSetup(AccountSetupError::InvalidInvite));
@@ -80,8 +80,6 @@ pub async fn validate_invite_token_route(
     headers: HeaderMap,
     axum::response::Json(invite_token): axum::response::Json<InviteToken>,
 ) -> impl IntoResponse {
-    #[cfg(feature = "debug-logging")]
-    tracing::debug!("{:?}", headers);
     match validate_invite_token(&invite_token.token, &headers, auth_manager).await {
         Ok(user_setup_flow) => (StatusCode::OK, Json(user_setup_flow)).into_response(),
         Err(err) => {
@@ -111,7 +109,7 @@ async fn setup_user_account(
             true,
         )?;
     let user_setup_incomplete: Option<bool> = auth_manager
-        .user_setup_incomplete(user_invite_instance.get_user_id())
+        .user_setup_incomplete(user_invite_instance.get_user_uid())
         .await;
     if user_setup_incomplete.is_none() {
         return Err(Error::AccountSetup(AccountSetupError::InvalidInvite));
@@ -164,8 +162,6 @@ pub async fn setup_user_account_route(
     headers: HeaderMap,
     axum::response::Json(user_setup): axum::response::Json<UserSetup>,
 ) -> impl IntoResponse {
-    #[cfg(feature = "debug-logging")]
-    tracing::debug!("{:?}", headers);
     match setup_user_account(user_setup, &headers, auth_manager).await {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => match err {

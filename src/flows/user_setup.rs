@@ -11,22 +11,22 @@ use uuid::Uuid;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserInvite {
     email: EmailAddress,
-    user_id: Uuid,
+    user_uid: Uuid,
 }
 
 impl UserInvite {
     pub fn get_email(&self) -> &EmailAddress {
         &self.email
     }
-    pub fn get_user_id(&self) -> &Uuid {
-        &self.user_id
+    pub fn get_user_uid(&self) -> &Uuid {
+        &self.user_uid
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserInviteInstance {
     email: EmailAddress,
-    user_id: Uuid,
+    user_uid: Uuid,
     two_fa_client_secret: String,
 }
 
@@ -34,15 +34,15 @@ impl UserInviteInstance {
     pub fn from_user_invite(user_invite: UserInvite) -> Self {
         Self {
             email: user_invite.email,
-            user_id: user_invite.user_id,
+            user_uid: user_invite.user_uid,
             two_fa_client_secret: generate_random_base32_string(64),
         }
     }
     pub fn get_email(&self) -> &EmailAddress {
         &self.email
     }
-    pub fn get_user_id(&self) -> &Uuid {
-        &self.user_id
+    pub fn get_user_uid(&self) -> &Uuid {
+        &self.user_uid
     }
     pub fn get_two_fa_client_secret(&self) -> &String {
         &self.two_fa_client_secret
@@ -50,8 +50,8 @@ impl UserInviteInstance {
 }
 
 impl UserInvite {
-    pub fn new(email: EmailAddress, user_id: Uuid) -> Self {
-        Self { email, user_id }
+    pub fn new(email: EmailAddress, user_uid: Uuid) -> Self {
+        Self { email, user_uid }
     }
 }
 

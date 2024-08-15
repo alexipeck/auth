@@ -24,10 +24,6 @@ impl_error_wrapper!(SignatureError, signature::Error);
 impl_error_wrapper!(DecodeError, base64::DecodeError);
 impl_error_wrapper!(InvalidHeaderValue, axum::http::header::InvalidHeaderValue);
 
-//impl_error_wrapper!(AeadError, aead::Error);
-
-//impl_error_wrapper!(EmailAddressError, email_address::EmailAddress);
-
 #[derive(Error, Debug)]
 pub enum AuthFlowError {
     #[error("Expired")]
@@ -301,12 +297,6 @@ impl From<UIDAuthorityError> for Error {
 }
 
 #[derive(Error, Debug)]
-pub enum IdentityError {
-    #[error("MissingExpiry")]
-    MissingExpiry,
-}
-
-#[derive(Error, Debug)]
 pub enum Error {
     #[error("BearerTokenPairInvalidFormat")]
     BearerTokenPairInvalidFormat,
@@ -344,6 +334,4 @@ pub enum Error {
     Database(DatabaseError),
     #[error("UIDAuthority({0})")]
     UIDAuthority(UIDAuthorityError),
-    #[error("Identity({0})")]
-    Identity(IdentityError),
 }

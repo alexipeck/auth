@@ -1,11 +1,5 @@
-use crate::error::{AuthenticationError, Error};
-use aead::OsRng;
 use email_address::EmailAddress;
-use peck_lib::auth::{
-    error::{RSAError, SerdeError},
-    token_pair::TokenPair,
-};
-use rsa::Pkcs1v15Encrypt;
+use peck_lib::auth::token_pair::TokenPair;
 pub use rsa::RsaPublicKey;
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -33,7 +27,7 @@ pub struct LoginCredentials {
 }
 
 #[derive(Serialize, Debug)]
-pub struct SixDigitString(String);
+pub struct SixDigitString(pub String);
 
 impl TryFrom<String> for SixDigitString {
     type Error = &'static str;

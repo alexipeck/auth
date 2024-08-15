@@ -2,12 +2,9 @@ use crate::{
     auth_manager::AuthManager,
     error::{AuthServerBuildError, Error},
     routes::{
-        authenticated::{get_write_token_route, refresh_read_token_route},
+        authenticated::{get_user_profile_route, get_write_token_route, refresh_read_token_route},
         debug_route,
-        login::{
-            init_identity_login_flow_route, init_login_flow_route, login_with_credentials_route,
-            login_with_identity_route,
-        },
+        login::{init_login_flow_route, login_with_credentials_route, logout_route},
         setup::{setup_user_account_route, validate_invite_token_route},
     },
     DEFAULT_INVITE_FLOW_LIFETIME_SECONDS, DEFAULT_INVITE_LIFETIME_SECONDS,
@@ -112,11 +109,10 @@ async fn start_server(auth_server: Arc<AuthServer>) {
         .nest(
             "/auth",
             Router::new()
-                .route("/login/init-login-flow", get(init_login_flow_route))
-                .route("/login/init-identity-flow", get(init_identity_login_flow_route))
+                .route("/login/init-flow", get(init_login_flow_route))
+                .route("/logout", get(logout_route))
                 .route("/debug", post(debug_route))
                 .route("/login/credentials", post(login_with_credentials_route))
-                .route("/login/identity", post(login_with_identity_route))
                 .route("/setup/init-setup-flow", post(validate_invite_token_route))
                 .route("/setup/credentials", post(setup_user_account_route))
                 .route(
@@ -127,6 +123,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
                     "/authenticated/get-write-token",
                     post(get_write_token_route),
                 )
+                .route("/authenticated/user-profile", get(get_user_profile_route))
                 .layer(cors.to_owned())
                 .layer(Extension(auth_server.auth_manager.to_owned())),
         )
