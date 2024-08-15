@@ -135,6 +135,7 @@ pub struct UserSafe {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserProfile {
     pub display_name: String,
     pub email: EmailAddress,
