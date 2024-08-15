@@ -460,7 +460,7 @@ impl AuthManager {
         &self,
         read_token: &str,
         headers: &HeaderMap,
-    ) -> Result<TokenPair, Error> {
+    ) -> Result<(TokenPair, i64), Error> {
         let (user_token, existing_expiry) = self.verify_and_decrypt::<UserToken>(read_token)?;
         let existing_expiry = match existing_expiry {
             Some(expiry) => expiry,
@@ -478,7 +478,7 @@ impl AuthManager {
             ));
         }
         let (user_uid, mut token_mode) = user_token.extract();
-        let expiry: DateTime<Utc>;
+        let expiry: (DateTime<Utc>, Option<i64>);
         let headers: BTreeMap<String, HeaderValue> =
             filter_headers_into_btreeset(headers, &self.regexes.roaming_header_profile);
         if let TokenMode::Read(read_mode) = &mut token_mode {
@@ -491,11 +491,13 @@ impl AuthManager {
 
         let user_token: UserToken = UserToken::new(token_mode, user_uid);
 
-        let result = self.create_signed_and_encrypted_token_with_expiry(user_token, expiry);
-        if result.is_ok() {
-            info!("Read token refreshed for user {}", user_uid);
-        }
-        result
+        let read_token =
+            self.create_signed_and_encrypted_token_with_expiry(user_token, expiry.0)?;
+        info!("Read token refreshed for user {}", user_uid);
+        Ok((
+            read_token,
+            expiry.1.unwrap_or(self.config.read_lifetime_seconds - 5),
+        ))
         //TODO: Add requirement for minimum number of expected headers to be present to prevent clients sending minimal headers
     }
 

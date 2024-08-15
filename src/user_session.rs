@@ -67,7 +67,7 @@ impl ReadInternal {
         &mut self,
         headers_hash: &String,
         read_lifetime_seconds: i64,
-    ) -> Result<DateTime<Utc>, Error> {
+    ) -> Result<(DateTime<Utc>, Option<i64>), Error> {
         if &self.headers_hash != headers_hash {
             return Err(Error::ReadTokenAsRefreshToken(
                 ReadTokenAsRefreshTokenError::InvalidHeaders,
@@ -79,14 +79,15 @@ impl ReadInternal {
                 ReadTokenAsRefreshTokenError::HasHitIterationLimit,
             ));
         }
-        let expiry: DateTime<Utc> = {
+        let expiry: (DateTime<Utc>, Option<i64>) = {
             let proposed_expiry: DateTime<Utc> =
                 Utc::now() + Duration::seconds(read_lifetime_seconds);
             if proposed_expiry > self.latest_expiry {
+                let seconds_until_latest_expiry = (self.latest_expiry - Utc::now()).num_seconds();
                 tracing::debug!("Read token expiry truncated to latest_expiry");
-                self.latest_expiry
+                (self.latest_expiry, Some(seconds_until_latest_expiry))
             } else {
-                proposed_expiry
+                (proposed_expiry, None)
             }
         };
         Ok(expiry)
