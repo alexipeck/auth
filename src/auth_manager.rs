@@ -29,7 +29,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, trace};
 use uuid::Uuid;
 
 pub struct Regexes {
@@ -493,7 +493,7 @@ impl AuthManager {
 
         let read_token =
             self.create_signed_and_encrypted_token_with_expiry(user_token, expiry.0)?;
-        info!("Read token refreshed for user {}", user_uid);
+        trace!("Read token refreshed for user {}", user_uid);
         Ok((
             read_token,
             expiry.1.unwrap_or(self.config.read_lifetime_seconds - 5),
