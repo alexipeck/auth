@@ -88,6 +88,7 @@ pub async fn refresh_read_token_route(
 
 #[derive(Serialize, Deserialize)]
 pub struct GetWriteTokenData {
+    #[serde(rename = "twoFACode")]
     two_fa_code: SixDigitString,
 }
 
