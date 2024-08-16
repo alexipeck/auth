@@ -244,13 +244,7 @@ pub async fn login_with_credentials_route(
         }
         Err(err) => {
             warn!("{}", err);
-            match err {
-                Error::Authentication(
-                    AuthenticationError::IncorrectCredentials
-                    | AuthenticationError::Incorrect2FACode,
-                ) => StatusCode::UNAUTHORIZED.into_response(),
-                _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-            }
+            StatusCode::UNAUTHORIZED.into_response()
         }
     }
 }
