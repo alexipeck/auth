@@ -298,8 +298,6 @@ impl From<UIDAuthorityError> for Error {
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("BearerTokenPairInvalidFormat")]
-    BearerTokenPairInvalidFormat,
     #[error("AuthFlow({0})")]
     AuthFlow(#[from] AuthFlowError),
     #[error("AccountSetupError({0})")]

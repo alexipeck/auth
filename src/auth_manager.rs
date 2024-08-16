@@ -717,16 +717,14 @@ impl AuthManager {
         }
     }
 
-    pub fn validate_write_token(&self, token: &str, headers: &HeaderMap) -> Result<Uuid, Error> {
+    pub fn validate_write_token(
+        &self,
+        read_token: &str,
+        write_token: &str,
+        headers: &HeaderMap,
+    ) -> Result<Uuid, Error> {
         #[cfg(feature = "debug-logging")]
         tracing::debug!("Headers for validating write token {:?}", headers);
-        let (read_token, write_token) = {
-            let t: Vec<&str> = token.split(':').collect::<Vec<&str>>();
-            if t.len() != 2 {
-                return Err(Error::BearerTokenPairInvalidFormat);
-            }
-            (t[0], t[1])
-        };
         let (read_user_uid, read_internal) = self.validate_read_token(read_token, headers)?;
         let (user_token, _) = self.verify_and_decrypt::<UserToken>(write_token)?;
         let (write_user_uid, token_mode) = user_token.extract();

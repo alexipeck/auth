@@ -1,6 +1,6 @@
 use crate::{
     auth_manager::{AuthManager, FlowType},
-    error::{AuthenticationError, Error},
+    error::Error,
     flows::{user_login::LoginCredentials, Lifetime},
     user::UserProfile,
 };
