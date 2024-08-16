@@ -507,7 +507,8 @@ impl AuthManager {
         two_fa_code: &SixDigitString,
         headers: &HeaderMap,
     ) -> Result<TokenPair, Error> {
-        let (user_uid, read_internal) = self.validate_read_token(read_token, headers)?;
+        let (user_uid, read_internal, _read_expiry) =
+            self.validate_read_token(read_token, headers)?;
         if let Some(user) = self.users.read().await.get(&user_uid) {
             user.validate_two_fa_code(two_fa_code)?;
         } else {
@@ -696,10 +697,10 @@ impl AuthManager {
         &self,
         token: &str,
         headers: &HeaderMap,
-    ) -> Result<(Uuid, ReadInternal), Error> {
+    ) -> Result<(Uuid, ReadInternal, Option<DateTime<Utc>>), Error> {
         #[cfg(feature = "debug-logging")]
         tracing::debug!("Headers for validating read token {:?}", headers);
-        let (user_token, _) = self.verify_and_decrypt::<UserToken>(token)?;
+        let (user_token, expiry) = self.verify_and_decrypt::<UserToken>(token)?;
         let (user_uid, token_mode) = user_token.extract();
         if let TokenMode::Read(read_mode) = token_mode {
             let headers =
@@ -709,7 +710,7 @@ impl AuthManager {
                     ReadTokenValidationError::InvalidHeaders,
                 ));
             }
-            Ok((user_uid, *read_mode))
+            Ok((user_uid, *read_mode, expiry))
         } else {
             Err(Error::ReadTokenValidation(
                 ReadTokenValidationError::NotReadToken,
@@ -717,16 +718,18 @@ impl AuthManager {
         }
     }
 
+    ///returned tuple is (user_uid, read_expiry, write_expiry)
     pub fn validate_write_token(
         &self,
         read_token: &str,
         write_token: &str,
         headers: &HeaderMap,
-    ) -> Result<Uuid, Error> {
+    ) -> Result<(Uuid, Option<DateTime<Utc>>, Option<DateTime<Utc>>), Error> {
         #[cfg(feature = "debug-logging")]
         tracing::debug!("Headers for validating write token {:?}", headers);
-        let (read_user_uid, read_internal) = self.validate_read_token(read_token, headers)?;
-        let (user_token, _) = self.verify_and_decrypt::<UserToken>(write_token)?;
+        let (read_user_uid, read_internal, read_expiry) =
+            self.validate_read_token(read_token, headers)?;
+        let (user_token, write_expiry) = self.verify_and_decrypt::<UserToken>(write_token)?;
         let (write_user_uid, token_mode) = user_token.extract();
         if read_user_uid != write_user_uid {
             return Err(Error::WriteTokenValidation(
@@ -751,7 +754,7 @@ impl AuthManager {
                 WriteTokenValidationError::NotWriteToken,
             ));
         }
-        Ok(write_user_uid)
+        Ok((write_user_uid, read_expiry, write_expiry))
     }
 
     pub async fn validate_user_credentials(

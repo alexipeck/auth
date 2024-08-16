@@ -243,7 +243,6 @@ impl Token {
         verifying_key: VerifyingKey<Sha256>,
         symmetric_key: &[u8],
     ) -> Result<(T, Option<DateTime<Utc>>), Error> {
-        let cipher = Aes256Gcm::new(GenericArray::from_slice(&symmetric_key));
         let deserialised_data_struct = match &self.inner {
             TokenInner::RSASigned(serialised_data_base64) => {
                 if let Err(err) =
@@ -273,6 +272,7 @@ impl Token {
                 deserialised_data_struct
             }
             TokenInner::RSASignedSHA256Encrypted(encrypted_data_base64, nonce) => {
+                let cipher = Aes256Gcm::new(GenericArray::from_slice(&symmetric_key));
                 if let Err(err) =
                     verifying_key.verify(encrypted_data_base64.as_bytes(), &self.signature.0)
                 {
