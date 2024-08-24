@@ -124,6 +124,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
                     post(get_write_token_route),
                 )
                 .route("/authenticated/user-profile", get(get_user_profile_route))
+                .route("/keep-alive", get(keep_alive_route()))
                 .layer(cors.to_owned())
                 .layer(Extension(auth_server.auth_manager.to_owned())),
         )

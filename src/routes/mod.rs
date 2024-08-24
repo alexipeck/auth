@@ -17,3 +17,7 @@ pub async fn debug_route(
     println!("{:?}", cookie);
     StatusCode::OK.into_response()
 }
+
+pub async fn keep_alive_route() -> impl IntoResponse {
+    StatusCode::OK.into_response()
+}
