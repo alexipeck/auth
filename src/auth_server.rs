@@ -3,7 +3,7 @@ use crate::{
     error::{AuthServerBuildError, Error},
     routes::{
         authenticated::{get_user_profile_route, get_write_token_route, refresh_read_token_route},
-        debug_route,
+        debug_route, keep_alive_route,
         login::{init_login_flow_route, login_with_credentials_route, logout_route},
         setup::{setup_user_account_route, validate_invite_token_route},
     },
