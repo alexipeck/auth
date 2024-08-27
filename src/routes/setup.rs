@@ -138,6 +138,7 @@ pub async fn validate_invite_token_route(
             match builder.body(Body::from(
                 match serde_json::to_string(&UserSetup {
                     two_fa_client_secret,
+                    seconds_until_expiry: seconds_until_expiry as u32,
                 }) {
                     Ok(t) => t,
                     Err(err) => {

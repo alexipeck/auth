@@ -40,4 +40,5 @@ pub struct SetupCredentials {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserSetup {
     pub two_fa_client_secret: String,
+    pub seconds_until_expiry: u32,
 }
