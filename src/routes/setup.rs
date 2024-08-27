@@ -12,6 +12,7 @@ use axum::{
 use axum_extra::{headers::Cookie, TypedHeader};
 use chrono::{Duration, Utc};
 use cookie::{time::OffsetDateTime, CookieBuilder, SameSite};
+use email_address::EmailAddress;
 use google_authenticator::GoogleAuthenticator;
 use peck_lib::{crypto::generate_random_base32_string, datetime::r#trait::Expired};
 use std::sync::Arc;
@@ -21,7 +22,7 @@ async fn validate_invite_token(
     invite_token: &str,
     headers: &HeaderMap,
     auth_manager: Arc<AuthManager>,
-) -> Result<(String, String, i64, String), Error> {
+) -> Result<(String, String, i64, String, EmailAddress), Error> {
     let (user_invite, expiry) = auth_manager.verify_and_decrypt::<UserInvite>(invite_token)?;
     let expiry = match expiry {
         Some(expiry) => expiry,
@@ -80,6 +81,7 @@ async fn validate_invite_token(
         tokenized_two_fa_client_secret,
         seconds_until_expiry,
         invite_token.to_string(),
+        user_invite.get_email().to_owned(),
     ))
 }
 
@@ -94,6 +96,7 @@ pub async fn validate_invite_token_route(
             tokenized_two_fa_client_secret,
             seconds_until_expiry,
             invite_token,
+            email,
         )) => {
             let mut builder = Response::builder().status(StatusCode::OK);
 
@@ -139,6 +142,7 @@ pub async fn validate_invite_token_route(
                 match serde_json::to_string(&UserSetup {
                     two_fa_client_secret,
                     seconds_until_expiry: seconds_until_expiry as u32,
+                    email,
                 }) {
                     Ok(t) => t,
                     Err(err) => {
