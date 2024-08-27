@@ -163,6 +163,8 @@ pub enum AccountSetupError {
     CouldntGetUserIDFromEmail,
     #[error("InvalidInvite")]
     InvalidInvite,
+    #[error("GracePeriodExpiryIsNegative")]
+    GracePeriodExpiryIsNegative,
 }
 
 #[derive(Error, Debug)]
@@ -300,7 +302,7 @@ impl From<UIDAuthorityError> for Error {
 pub enum Error {
     #[error("AuthFlow({0})")]
     AuthFlow(#[from] AuthFlowError),
-    #[error("AccountSetupError({0})")]
+    #[error("AccountSetup({0})")]
     AccountSetup(#[from] AccountSetupError),
     #[error("Authentication({0})")]
     Authentication(#[from] AuthenticationError),

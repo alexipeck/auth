@@ -535,12 +535,6 @@ impl AuthManager {
         let (flow, expiry): (Flow<T>, Option<DateTime<Utc>>) =
             self.verify_and_decrypt::<Flow<T>>(token)?;
         if flow.get_type() != r#type {
-            #[cfg(feature = "debug-logging")]
-            tracing::debug!(
-                "Flow is of type {:?} but is expecting {:?}.",
-                flow.get_type(),
-                r#type
-            );
             return Err(Error::AuthFlow(AuthFlowError::IncorrectType));
         }
         let headers: std::collections::BTreeMap<String, HeaderValue> = filter_headers_into_btreeset(
@@ -698,8 +692,6 @@ impl AuthManager {
         token: &str,
         headers: &HeaderMap,
     ) -> Result<(Uuid, ReadInternal, Option<DateTime<Utc>>), Error> {
-        #[cfg(feature = "debug-logging")]
-        tracing::debug!("Headers for validating read token {:?}", headers);
         let (user_token, expiry) = self.verify_and_decrypt::<UserToken>(token)?;
         let (user_uid, token_mode) = user_token.extract();
         if let TokenMode::Read(read_mode) = token_mode {
@@ -725,8 +717,6 @@ impl AuthManager {
         write_token: &str,
         headers: &HeaderMap,
     ) -> Result<(Uuid, Option<DateTime<Utc>>, Option<DateTime<Utc>>), Error> {
-        #[cfg(feature = "debug-logging")]
-        tracing::debug!("Headers for validating write token {:?}", headers);
         let (read_user_uid, read_internal, read_expiry) =
             self.validate_read_token(read_token, headers)?;
         let (user_token, write_expiry) = self.verify_and_decrypt::<UserToken>(write_token)?;

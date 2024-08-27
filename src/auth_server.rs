@@ -113,7 +113,7 @@ async fn start_server(auth_server: Arc<AuthServer>) {
                 .route("/logout", get(logout_route))
                 .route("/debug", post(debug_route))
                 .route("/login/credentials", post(login_with_credentials_route))
-                .route("/setup/init-setup-flow", post(validate_invite_token_route))
+                .route("/setup/init-flow", post(validate_invite_token_route))
                 .route("/setup/credentials", post(setup_user_account_route))
                 .route(
                     "/authenticated/refresh-read-token",
