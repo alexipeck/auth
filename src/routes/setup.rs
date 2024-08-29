@@ -79,7 +79,7 @@ async fn validate_invite_token(
     Ok((
         two_fa_client_secret,
         tokenized_two_fa_client_secret,
-        seconds_until_expiry,
+        seconds_until_expiry - 5,
         invite_token.to_string(),
         user_invite.get_email().to_owned(),
     ))
@@ -160,14 +160,7 @@ pub async fn validate_invite_token_route(
         }
         Err(err) => {
             warn!("{}", err);
-            match err {
-                Error::AccountSetup(
-                    AccountSetupError::InvalidInvite
-                    | AccountSetupError::AccountSetupAlreadyComplete,
-                ) => StatusCode::UNAUTHORIZED,
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            }
-            .into_response()
+            StatusCode::UNAUTHORIZED.into_response()
         }
     }
 }
