@@ -24,10 +24,6 @@ impl_error_wrapper!(SignatureError, signature::Error);
 impl_error_wrapper!(DecodeError, base64::DecodeError);
 impl_error_wrapper!(InvalidHeaderValue, axum::http::header::InvalidHeaderValue);
 
-//impl_error_wrapper!(AeadError, aead::Error);
-
-//impl_error_wrapper!(EmailAddressError, email_address::EmailAddress);
-
 #[derive(Error, Debug)]
 pub enum AuthFlowError {
     #[error("Expired")]
@@ -167,6 +163,8 @@ pub enum AccountSetupError {
     CouldntGetUserIDFromEmail,
     #[error("InvalidInvite")]
     InvalidInvite,
+    #[error("GracePeriodExpiryIsNegative")]
+    GracePeriodExpiryIsNegative,
 }
 
 #[derive(Error, Debug)]
@@ -301,18 +299,10 @@ impl From<UIDAuthorityError> for Error {
 }
 
 #[derive(Error, Debug)]
-pub enum IdentityError {
-    #[error("MissingExpiry")]
-    MissingExpiry,
-}
-
-#[derive(Error, Debug)]
 pub enum Error {
-    #[error("BearerTokenPairInvalidFormat")]
-    BearerTokenPairInvalidFormat,
     #[error("AuthFlow({0})")]
     AuthFlow(#[from] AuthFlowError),
-    #[error("AccountSetupError({0})")]
+    #[error("AccountSetup({0})")]
     AccountSetup(#[from] AccountSetupError),
     #[error("Authentication({0})")]
     Authentication(#[from] AuthenticationError),
@@ -344,6 +334,4 @@ pub enum Error {
     Database(DatabaseError),
     #[error("UIDAuthority({0})")]
     UIDAuthority(UIDAuthorityError),
-    #[error("Identity({0})")]
-    Identity(IdentityError),
 }

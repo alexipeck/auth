@@ -1,10 +1,9 @@
 use crate::{
     cryptography::generate_token,
     error::{AccountSetupError, AuthenticationError, Error},
+    flows::user_login::SixDigitString,
     model::UserModel,
-    user_session::UserSession,
 };
-use chrono::{DateTime, Utc};
 use email_address::EmailAddress;
 use google_authenticator::GoogleAuthenticator;
 use serde::Serialize;
@@ -69,7 +68,7 @@ impl User {
         UserProfile {
             display_name: self.display_name.to_owned(),
             email: self.email.to_owned(),
-            user_id: self.id.to_owned(),
+            user_uid: self.id.to_owned(),
         }
     }
     /// This function is only allowed to be called once.
@@ -111,12 +110,11 @@ impl User {
     pub fn get_hashed_and_salted_password(&self) -> &String {
         &self.hashed_and_salted_password
     }
-    pub fn validate_two_fa_code(&self, two_fa_code: &[u8; 6]) -> Result<(), Error> {
+    pub fn validate_two_fa_code(&self, two_fa_code: &SixDigitString) -> Result<(), Error> {
         let auth = GoogleAuthenticator::new();
         match auth.get_code(&self.two_fa_client_secret, 0) {
             Ok(current_code) => {
-                let two_fa_code: String = String::from_utf8(two_fa_code.to_vec()).unwrap();
-                if two_fa_code == current_code {
+                if two_fa_code.0 == current_code {
                     Ok(())
                 } else {
                     Err(Error::Authentication(AuthenticationError::Incorrect2FACode))
@@ -137,22 +135,9 @@ pub struct UserSafe {
 }
 
 #[derive(Debug, Serialize)]
-pub struct IdentityCookie {
-    pub name: String,
-    pub token: String,
-    pub expiry: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserProfile {
     pub display_name: String,
     pub email: EmailAddress,
-    pub user_id: Uuid,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ClientState {
-    pub user_session: UserSession,
-    pub user_profile: UserProfile,
-    pub identity: Option<IdentityCookie>,
+    pub user_uid: Uuid,
 }
