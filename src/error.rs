@@ -3,7 +3,6 @@ use google_authenticator::GAError;
 use peck_lib::{
     auth::error::{RSAError, SerdeError},
     impl_error_wrapper,
-    uid::error::UIDAuthorityError,
 };
 use thiserror::Error;
 use uuid::Uuid;
@@ -292,12 +291,6 @@ pub enum WriteTokenValidationError {
     WriteUIDNotMatchReadUID,
 }
 
-impl From<UIDAuthorityError> for Error {
-    fn from(value: UIDAuthorityError) -> Self {
-        Error::UIDAuthority(value)
-    }
-}
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("AuthFlow({0})")]
@@ -332,6 +325,4 @@ pub enum Error {
     UserFromModel(UserFromModelError),
     #[error("Database({0})")]
     Database(DatabaseError),
-    #[error("UIDAuthority({0})")]
-    UIDAuthority(UIDAuthorityError),
 }

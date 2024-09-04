@@ -230,7 +230,7 @@ impl AuthManager {
         if let Some(uid_authority) = uid_authority.as_ref() {
             uid_authority
                 .insert_bulk(users.keys().copied().collect::<Vec<Uuid>>())
-                .await?;
+                .await;
         }
         let email_to_id_registry: Arc<RwLock<HashMap<EmailAddress, Uuid>>> = Arc::new(RwLock::new(
             users

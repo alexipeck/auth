@@ -2,7 +2,7 @@
 authors = ["Alexi Peck <alexinicolaspeck@gmail.com>"]
 edition = "2021"
 name = "auth"
-version = "0.4.2"
+version = "0.4.3"
 
 [features]
 
