@@ -18,8 +18,8 @@ This server can be used standalone for client-only use cases, but the server can
 - SMTP
 - Tokenization of arbitrary data
 - Read/Write token mechanism for client authentication
+- secure httponly cookies
 
 ### TODO:
 Add rolling encryption keys
 Add proper CSP
-Redo cookie support (should probably be done at the same time as CSP)
