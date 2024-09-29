@@ -2,16 +2,16 @@
 authors = ["Alexi Peck <alexinicolaspeck@gmail.com>"]
 edition = "2021"
 name = "auth"
-version = "0.4.3"
+version = "0.4.4"
 
 [features]
 
 [dependencies]
 aead = "0.5.2"
 aes-gcm = "0.10.3"
-axum = {version = "0.7.5", features = ["http2", "tokio", "json"]}
-axum-core = "0.4.3"
-axum-extra = {version = "0.9.3", features = ["typed-header"]}
+axum = {version = "0.7.7", features = ["http2", "tokio", "json"]}
+axum-core = "0.4.5"
+axum-extra = {version = "0.9.4", features = ["typed-header"]}
 base64 = "0.22.1"
 blake3 = "1.5.4"
 chrono = {version = "0.4.38", features = ["serde"]}
@@ -22,7 +22,7 @@ diesel_migrations = "2.2.0"
 directories = "5.0.1"
 email_address = {version = "0.2.9", features = ["serde_support"]}
 google-authenticator = "0.4.2"
-lettre = "0.11.8"
+lettre = "0.11.9"
 peck-lib = {git = "https://github.com/alexipeck/peck-lib", features = ["datetime", "hashing", "uid", "crypto", "auth"]}
 pkcs1 = "0.7.5"
 rand = "0.8.5"
@@ -31,13 +31,13 @@ rand_core = {version = "0.6.4", features = ["getrandom"]}
 regex = "1.10.6"
 rsa = {version = "0.9.6", features = ["sha2", "serde", "std"]}
 rust-argon2 = "2.1.0"
-serde = {version = "1.0.209", features = ["derive"]}
-serde_json = {version = "1.0.127"}
+serde = {version = "1.0.210", features = ["derive"]}
+serde_json = {version = "1.0.128"}
 signature = "2.2.0"
-thiserror = "1.0.63"
+thiserror = "1.0.64"
 tokio = {version = "1.40.0", default-features = false, features = ["macros", "net", "rt-multi-thread", "time", "signal"]}
 toml = "0.8.19"
-tower-http = {version = "0.5.2", features = ["cors", "trace"]}
+tower-http = {version = "0.6.1", features = ["cors", "trace"]}
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
 tracing-subscriber = {version = "0.3.18"}
