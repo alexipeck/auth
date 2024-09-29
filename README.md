@@ -23,3 +23,4 @@ This server can be used standalone for client-only use cases, but the server can
 ### TODO:
 Add rolling encryption keys
 Add proper CSP
+Add CSRF
