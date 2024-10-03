@@ -1,5 +1,5 @@
 ## Authentication Server and cryptographic libraries
-### WIP: INCOMPLETE AND UNVERIFIED
+### WIP: UNVERIFIED
 ### If you do decide to use it, be careful how you use it
 
 The project provides an authentication server with simple SQLite database for user data persistence and a series of library functions to generate and verify/decrypt these tokens. It provides other structs to manage the encryption keys, but the main AuthManager struct will generate these for you when initialised and provides helper functions to abstract away encryption/decryption and serialization/deserialization.
