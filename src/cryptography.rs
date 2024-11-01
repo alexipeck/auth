@@ -120,6 +120,59 @@ impl EncryptionKeys {
         })
     }
 
+    pub fn export_to_json(&self) -> Result<String, Error> {
+        let signing_private_key_pkcs1_pem =
+            match self.signing_private_key.to_pkcs1_pem(LineEnding::LF) {
+                Ok(signing_private_key_pkcs1_pem) => signing_private_key_pkcs1_pem.to_string(),
+                Err(err) => {
+                    return Err(Error::Encryption(
+                        EncryptionError::ConvertSigningPrivateKeyToPEMPKCS1(PKCS1Error(err)),
+                    ))
+                }
+            };
+        let signing_public_key_pkcs1_pem =
+            match self.signing_public_key.to_pkcs1_pem(LineEnding::LF) {
+                Ok(signing_public_key_pkcs1_pem) => signing_public_key_pkcs1_pem,
+                Err(err) => {
+                    return Err(Error::Encryption(
+                        EncryptionError::ConvertSigningPublicKeyToPEMPKCS1(PKCS1Error(err)),
+                    ))
+                }
+            };
+        let private_key_pkcs1_pem = match self.private_key.to_pkcs1_pem(LineEnding::LF) {
+            Ok(private_key) => private_key.to_string(),
+            Err(err) => {
+                return Err(Error::Encryption(
+                    EncryptionError::ConvertPrivateKeyToPEMPKCS1(PKCS1Error(err)),
+                ))
+            }
+        };
+        let public_key_pkcs1_pem = match self.public_key.to_pkcs1_pem(LineEnding::LF) {
+            Ok(public_key) => public_key,
+            Err(err) => {
+                return Err(Error::Encryption(
+                    EncryptionError::ConvertPublicKeyToPEMPKCS1(PKCS1Error(err)),
+                ))
+            }
+        };
+        let encryption_keys_model = EncryptionKeysModel {
+            signing_private_key: signing_private_key_pkcs1_pem,
+            signing_public_key: signing_public_key_pkcs1_pem,
+            private_key: private_key_pkcs1_pem,
+            public_key: public_key_pkcs1_pem,
+            symmetric_key: self.symmetric_key.to_owned(),
+        };
+        let json_string = match serde_json::to_string(&encryption_keys_model) {
+            Ok(json) => json,
+            Err(err) => {
+                return Err(Error::Encryption(EncryptionError::ConvertModelToJSON(
+                    SerdeError(err),
+                )))
+            }
+        };
+        Ok(json_string)
+    }
+
     pub fn save_to_file(&self, path: &str) -> Result<(), Error> {
         let signing_private_key_pkcs1_pem =
             match self.signing_private_key.to_pkcs1_pem(LineEnding::LF) {

@@ -200,6 +200,8 @@ pub enum EncryptionError {
     ConvertPublicKeyToPEMPKCS1(PKCS1Error),
     #[error("ConvertModelToTOML({0})")]
     ConvertModelToTOML(TomlSerError),
+    #[error("ConvertModelToJSON({0})")]
+    ConvertModelToJSON(SerdeError),
     #[error("WriteTOMLToFile({0})")]
     WriteTOMLToFile(StdIoError),
     #[error("ReadTOMLFromFile({0})")]
