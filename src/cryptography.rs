@@ -39,7 +39,7 @@ pub fn generate_token(length: usize) -> String {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct EncryptionKeysModel {
+pub struct EncryptionKeysModel {
     pub signing_private_key: String,
     pub signing_public_key: String,
     pub private_key: String,
