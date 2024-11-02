@@ -74,7 +74,7 @@ impl EncryptionKeys {
         })
     }
 
-    fn from_model(model: EncryptionKeysModel) -> Result<Self, Error> {
+    pub fn from_model(model: EncryptionKeysModel) -> Result<Self, Error> {
         let signing_private_key = match RsaPrivateKey::from_pkcs1_pem(&model.signing_private_key) {
             Ok(signing_private_key) => signing_private_key,
             Err(err) => {
