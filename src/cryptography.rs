@@ -78,7 +78,7 @@ impl EncryptionKeys {
             }
         };
         let private_key = match RsaPrivateKey::from_pkcs1_pem(&model.private_key) {
-            Ok(public_key) => public_key,
+            Ok(private_key) => private_key,
             Err(err) => {
                 return Err(Error::Encryption(EncryptionError::PrivateKeyFromPEMPKCS1(
                     PKCS1Error(err),

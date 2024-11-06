@@ -99,6 +99,8 @@ pub enum TokenError {
     Expired,
     #[error("MissingExpiry")]
     MissingExpiry,
+    #[error("CalledVerifyOnEncryptedToken")]
+    CalledVerifyOnEncryptedToken,
 }
 
 #[derive(Error, Debug)]

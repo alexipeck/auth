@@ -238,6 +238,54 @@ impl Token {
         .to_string()
     }
 
+    pub fn verify<T: Serialize + DeserializeOwned>(
+        &self,
+        verifying_key: VerifyingKey<Sha256>,
+    ) -> Result<(T, Option<DateTime<Utc>>), Error> {
+        let deserialised_data_struct = match &self.inner {
+            TokenInner::RSASigned(serialised_data_base64) => {
+                if let Err(err) =
+                    verifying_key.verify(serialised_data_base64.as_bytes(), &self.signature.0)
+                {
+                    return Err(Error::Token(TokenError::SignatureVerificationFailed(
+                        SignatureError(err),
+                    )));
+                };
+                let serialised_data = match URL_SAFE_NO_PAD.decode(serialised_data_base64) {
+                    Ok(encrypted_data) => encrypted_data,
+                    Err(err) => {
+                        return Err(Error::Token(TokenError::Base64Decode(Base64DecodeError(
+                            err,
+                        ))))
+                    }
+                };
+                let deserialised_data_struct: TokenInnerInner<T> =
+                    match serde_json::from_slice::<TokenInnerInner<T>>(&serialised_data) {
+                        Ok(decrypted_data_struct) => decrypted_data_struct,
+                        Err(err) => {
+                            return Err(Error::Token(TokenError::DataDeserialisation(SerdeError(
+                                err,
+                            ))))
+                        }
+                    };
+                deserialised_data_struct
+            }
+            TokenInner::RSASignedSHA256Encrypted(_, _) => {
+                return Err(Error::Token(TokenError::CalledVerifyOnEncryptedToken));
+            }
+        };
+        if let Some(expiry) = deserialised_data_struct.expiry {
+            if expiry.expired() {
+                return Err(Error::Token(TokenError::Expired));
+            }
+        }
+
+        Ok((
+            deserialised_data_struct.data,
+            deserialised_data_struct.expiry,
+        ))
+    }
+
     pub fn verify_and_decrypt<T: Serialize + DeserializeOwned>(
         &self,
         verifying_key: VerifyingKey<Sha256>,
