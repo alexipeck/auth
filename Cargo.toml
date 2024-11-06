@@ -2,7 +2,7 @@
 authors = ["Alexi Peck <alexinicolaspeck@gmail.com>"]
 edition = "2021"
 name = "auth"
-version = "0.4.5"
+version = "0.5.0"
 
 [features]
 
@@ -34,7 +34,7 @@ rust-argon2 = "2.1.0"
 serde = {version = "1.0.214", features = ["derive"]}
 serde_json = {version = "1.0.132"}
 signature = "2.2.0"
-thiserror = "1.0.66"
+thiserror = "1.0.68"
 tokio = {version = "1.41.0", default-features = false, features = ["macros", "net", "rt-multi-thread", "time", "signal"]}
 toml = "0.8.19"
 tower-http = {version = "0.6.1", features = ["cors", "trace"]}

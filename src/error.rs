@@ -57,18 +57,6 @@ pub enum AuthenticationError {
     EncryptLoginCredentials(RSAError),
     #[error("Disabled")]
     Disabled,
-    /* #[error("")]
-    ErrorGetting2FACodeFromSecret,
-    #[error("Argon2Validation({0})")]
-    Argon2Validation(String),
-    #[error("")]
-    Invalid2FASecret,
-    #[error("")]
-    InvalidInviteToken,
-    #[error("AccessDenied({0})")]
-    AccessDenied(Uuid),
-    #[error("EmailAlreadyExists({0})")]
-    EmailAlreadyExists(EmailAddress), */
 }
 
 #[derive(Error, Debug)]
@@ -87,31 +75,16 @@ pub enum TokenError {
     ConvertingBytesToSignature(SignatureError),
     #[error("DecodeURLSafeBase64({0})")]
     DecodeURLSafeBase64(DecodeError),
-    /* #[error("SerialiseLoginCredentials({0})")]
-    SerialiseLoginCredentials(SerdeError), */
-
-    /* #[error("CreateSigner({0})")]
-    CreateSigner(OpenSSLError),
-    #[error("FeedSigner({0})")]
-    FeedSigner(OpenSSLError),
-    #[error("FinaliseSignature({0})")]
-    FinaliseSignature(OpenSSLError), */
     #[error("InvalidFormatForDecoding")]
     InvalidFormatForDecoding,
     #[error("Base64Decode({0})")]
     Base64Decode(Base64DecodeError),
     #[error("HeaderBase64Decode({0})")]
     HeaderBase64Decode(Base64DecodeError),
-    /* #[error("Feedverifier({0})")]
-    FeedVerifier(OpenSSLError), */
     #[error("HeaderUnexpectedAlgorithm")]
     HeadedUnexpectedAlgorithm,
     #[error("SignatureBase64Decode({0})")]
     SignatureBase64Decode(Base64DecodeError),
-    /* #[error("CreateVerifier({0})")]
-    CreateVerifier(OpenSSLError), */
-    /* #[error("FinaliseVerifier({0})")]
-    FinaliseVerifier(RSAError), */
     #[error("SignatureVerificationFailed({0})")]
     SignatureVerificationFailed(SignatureError),
     #[error("PayloadBase64Decode({0})")]
@@ -174,18 +147,10 @@ pub enum StartupError {
 
 #[derive(Error, Debug)]
 pub enum EncryptionError {
-    /* #[error("GeneratingRSABase({0})")]
-    GeneratingRSABase(OpenSSLError), */
     #[error("GeneratingRSAPrivate({0})")]
     GeneratingRSAPrivate(RSAError),
-    /* #[error("GeneratingRSAPublic({0})")]
-    GeneratingRSAPublic(RSAError), */
-    /* #[error("GeneratingRSAPublicPEM({0})")]
-    GeneratingRSAPublicPEM(OpenSSLError), */
     #[error("RSAPrivateConversion({0})")]
     RSAPrivateConversion(RSAError),
-    /* #[error("DataDecryption({0})")]
-    DataDecryption(OpenSSLError), */
     #[error("PublicToPEMConversion({0})")]
     PublicToPEMConversion(PKCS1Error),
     #[error("PublicPEMBytesToString({0})")]
