@@ -229,7 +229,7 @@ impl EncryptionKeys {
         self.verifying_key.to_owned()
     }
 
-    pub fn get_verification_key_pem(&self) -> Result<String, Error> {
+    pub fn get_verifying_key_pem(&self) -> Result<String, Error> {
         match self
             .signing_private_key
             .to_public_key()
