@@ -7,7 +7,7 @@ use peck_lib::{
     auth::error::{RSAError, SerdeError},
     crypto::prepare_rng,
 };
-use pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey, LineEnding};
+use pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey, EncodeRsaPublicKey, LineEnding};
 use rand::Rng;
 use rand_core::OsRng;
 use rsa::{
@@ -227,6 +227,19 @@ impl EncryptionKeys {
 
     pub fn get_verifying_key(&self) -> VerifyingKey<Sha256> {
         self.verifying_key.to_owned()
+    }
+
+    pub fn get_verification_key_pem(&self) -> Result<String, Error> {
+        match self
+            .signing_private_key
+            .to_public_key()
+            .to_pkcs1_pem(LineEnding::LF)
+        {
+            Ok(verification_key_pem) => Ok(verification_key_pem),
+            Err(err) => Err(Error::Encryption(EncryptionError::PublicToPEMConversion(
+                PKCS1Error(err),
+            ))),
+        }
     }
 
     pub fn get_private_decryption_key(&self) -> &RsaPrivateKey {
